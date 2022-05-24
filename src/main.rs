@@ -1,9 +1,8 @@
-use std::env;
-use std::path::Path;
-
+use crate::cli::CliContext;
 use crate::git::GitContext;
 use crate::semver::SemanticVersion;
 
+mod cli;
 mod git;
 mod semver;
 
@@ -11,20 +10,22 @@ fn main() {
     let v = SemanticVersion::new("1.2.3").unwrap();
     println!("Hello, world! {}", v.to_string());
 
-    let mut args = env::args();
-    //move past the command
-    args.next();
-    let path_str = args.next().unwrap();
+    let cli_context = CliContext::new().expect("Failed to build CLI Context");
 
-    let path = Path::new(&path_str);
+    println!("Looking for a git repo at (or above) {}", cli_context.path);
+    let git_context = GitContext::new(&cli_context.path);
 
-    println!("Path {}", path.display());
+    let latest = git_context.get_latest_tag(&cli_context.tag_prefix).unwrap();
+    println!("Found tag '{}', will use that as base", latest.name);
 
-    let git_context = GitContext::new(path);
+    let relevant_commits = git_context.get_commits_since_tag(latest);
 
-    let latest = git_context.get_latest_tag("package-a").unwrap();
-
-    println!("Latest Tag: {:?}", latest);
-
-    git_context.get_commits_since_tag(latest);
+    if relevant_commits.len() != 0 {
+        println!("Found the following relevant commits:");
+        relevant_commits.iter().for_each(|commit| {
+            println!("commit: {:?}", commit);
+        });
+    } else {
+        println!("Found no commits since the last tag")
+    }
 }

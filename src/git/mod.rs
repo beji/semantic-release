@@ -1,9 +1,10 @@
-use std::path::Path;
+use std::{fs::canonicalize, path::Path};
 
 use git2::{DiffFormat, DiffOptions, Oid, Repository};
 
 pub struct GitContext {
     repo: Repository,
+    sub_path: String,
 }
 
 #[derive(Clone, Debug)]
@@ -20,12 +21,28 @@ pub struct GitCommit {
 }
 
 impl GitContext {
-    pub fn new(path: &Path) -> GitContext {
-        let repo = Repository::discover(path).expect(&format!(
+    pub fn new(path: &str) -> GitContext {
+        let path = Path::new(path);
+        let path = canonicalize(&path).expect("Failed to canonicalize input path");
+
+        let repo = Repository::discover(&path).expect(&format!(
             "Failed to open a git repo at {}, is this a git repo?",
-            path.display()
+            path.as_path().display()
         ));
-        GitContext { repo }
+
+        let repo_path = repo
+            .path()
+            .parent()
+            .expect("Failed to move up from the discovered repository")
+            .to_str()
+            .expect("Failed to build string from repo path");
+
+        let sub_path = path
+            .display()
+            .to_string()
+            .replace(&format!("{}/", repo_path), "");
+
+        GitContext { repo, sub_path }
     }
 
     pub fn get_latest_tag(&self, prefix: &str) -> Option<GitTag> {
@@ -47,7 +64,7 @@ impl GitContext {
         tags.last().cloned()
     }
 
-    pub fn get_commits_since_tag(&self, tag: GitTag, path: &str) -> Vec<GitCommit> {
+    pub fn get_commits_since_tag(&self, tag: GitTag) -> Vec<GitCommit> {
         let head = self
             .repo
             .head()
@@ -91,7 +108,7 @@ impl GitContext {
 
                 diff.print(DiffFormat::NameOnly, |_delta, _hunk, line| {
                     let changed_file = String::from_utf8_lossy(line.content());
-                    if changed_file.starts_with(path) {
+                    if changed_file.starts_with(&self.sub_path) {
                         is_relevant = true;
                     }
                     true
