@@ -14,7 +14,7 @@ pub struct GitTag {
 
 impl GitContext {
     pub fn new(path: &Path) -> GitContext {
-        let repo = Repository::open(path).expect(&format!(
+        let repo = Repository::discover(path).expect(&format!(
             "Failed to open a git repo at {}, is this a git repo?",
             path.display()
         ));
