@@ -16,8 +16,15 @@ pub struct GitTag {
 #[derive(Debug)]
 pub struct GitCommit {
     id: Oid,
-    summary: String,
+    pub summary: String,
     body: Option<String>,
+}
+
+impl GitCommit {
+    pub fn for_test(summary: String, body: Option<String>) -> GitCommit {
+        let id = Oid::from_str("1").unwrap();
+        GitCommit { id, summary, body }
+    }
 }
 
 impl GitContext {
