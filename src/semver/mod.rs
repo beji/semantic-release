@@ -1,15 +1,5 @@
 use std::fmt;
 
-use crate::git::GitCommit;
-
-#[derive(Debug, PartialEq, PartialOrd, Eq, Ord, Clone, Copy)]
-pub enum BumpLevel {
-    None,
-    Patch,
-    Minor,
-    Major,
-}
-
 pub struct SemanticVersion {
     major: usize,
     minor: usize,
@@ -63,49 +53,9 @@ impl SemanticVersion {
     }
 }
 
-pub fn calc_bumplevel(commits: &Vec<GitCommit>) -> BumpLevel {
-    let mut bumplevels: Vec<BumpLevel> = commits
-        .iter()
-        .map(|commit| {
-            let summary = &commit.summary;
-
-            // TODO: Implement handling for breaking changes
-
-            if summary.starts_with("fix") {
-                BumpLevel::Patch
-            } else if summary.starts_with("feat") {
-                BumpLevel::Minor
-            } else {
-                BumpLevel::None
-            }
-        })
-        .collect();
-    bumplevels.sort();
-    bumplevels.last().expect("Failed to get last element from bumplevels list; Most likely calc_bumplevel was called on an empty list").clone()
-}
-
 #[cfg(test)]
 mod tests {
     use crate::semver::*;
-
-    #[test]
-    fn calc_bumplevel_minor() {
-        let input: Vec<GitCommit> = vec![
-            GitCommit::for_test("fix".to_string(), None),
-            GitCommit::for_test("feat".to_string(), None),
-            GitCommit::for_test("fix".to_string(), None),
-        ];
-
-        let result = calc_bumplevel(&input);
-        assert_eq!(result, BumpLevel::Minor);
-    }
-
-    #[test]
-    fn bumplevel_comparison() {
-        assert!(BumpLevel::None < BumpLevel::Patch);
-        assert!(BumpLevel::Patch < BumpLevel::Minor);
-        assert!(BumpLevel::Minor < BumpLevel::Major);
-    }
 
     #[test]
     fn to_string() {

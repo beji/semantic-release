@@ -2,29 +2,17 @@ use std::{fs::canonicalize, path::Path};
 
 use git2::{DiffFormat, DiffOptions, Oid, Repository};
 
+#[derive(Debug, PartialEq, PartialOrd, Eq, Ord, Clone, Copy)]
+pub enum BumpLevel {
+    None,
+    Patch,
+    Minor,
+    Major,
+}
+
 pub struct GitContext {
     repo: Repository,
     sub_path: String,
-}
-
-#[derive(Clone, Debug)]
-pub struct GitTag {
-    id: Oid,
-    pub name: String,
-}
-
-#[derive(Debug)]
-pub struct GitCommit {
-    id: Oid,
-    pub summary: String,
-    body: Option<String>,
-}
-
-impl GitCommit {
-    pub fn for_test(summary: String, body: Option<String>) -> GitCommit {
-        let id = Oid::from_str("1").unwrap();
-        GitCommit { id, summary, body }
-    }
 }
 
 impl GitContext {
@@ -138,5 +126,94 @@ impl GitContext {
                 }
             })
             .collect()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct GitTag {
+    id: Oid,
+    pub name: String,
+}
+
+#[derive(Debug)]
+pub struct GitCommit {
+    id: Oid,
+    pub summary: String,
+    body: Option<String>,
+}
+
+impl GitCommit {
+    pub fn for_test(summary: String, body: Option<String>) -> GitCommit {
+        let id = Oid::from_str("1").unwrap();
+        GitCommit { id, summary, body }
+    }
+
+    pub fn to_bumplevel(&self) -> BumpLevel {
+        let summary = &self.summary;
+        let body = &self.body;
+
+        match body {
+            Some(body) => {
+                if body.contains("BREAKING CHANGE:") {
+                    BumpLevel::Major
+                } else {
+                    summary_to_bumplevel(&summary)
+                }
+            }
+            None => summary_to_bumplevel(&summary),
+        }
+    }
+}
+
+fn summary_to_bumplevel(summary: &str) -> BumpLevel {
+    if summary.starts_with("fix") {
+        BumpLevel::Patch
+    } else if summary.starts_with("feat") {
+        BumpLevel::Minor
+    } else {
+        BumpLevel::None
+    }
+}
+
+pub fn calc_bumplevel(commits: &Vec<GitCommit>) -> BumpLevel {
+    let mut bumplevels: Vec<BumpLevel> =
+        commits.iter().map(|commit| commit.to_bumplevel()).collect();
+    bumplevels.sort();
+    bumplevels.last().expect("Failed to get last element from bumplevels list; Most likely calc_bumplevel was called on an empty list").clone()
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::git::*;
+
+    #[test]
+    fn bumplevel_comparison() {
+        assert!(BumpLevel::None < BumpLevel::Patch);
+        assert!(BumpLevel::Patch < BumpLevel::Minor);
+        assert!(BumpLevel::Minor < BumpLevel::Major);
+    }
+
+    #[test]
+    fn calc_bumplevel_minor() {
+        let input: Vec<GitCommit> = vec![
+            GitCommit::for_test("fix".to_string(), None),
+            GitCommit::for_test("feat".to_string(), None),
+            GitCommit::for_test("fix".to_string(), None),
+        ];
+
+        let result = calc_bumplevel(&input);
+        assert_eq!(result, BumpLevel::Minor);
+    }
+
+    #[test]
+    fn calc_bumplevel_major() {
+        let input: Vec<GitCommit> = vec![
+            GitCommit::for_test("fix".to_string(), Some("BREAKING CHANGE:".to_string())),
+            GitCommit::for_test("feat".to_string(), None),
+            GitCommit::for_test("fix".to_string(), None),
+        ];
+
+        let result = calc_bumplevel(&input);
+        assert_eq!(result, BumpLevel::Major);
     }
 }
