@@ -1,5 +1,7 @@
 use std::fmt;
 
+use crate::git::BumpLevel;
+
 pub struct SemanticVersion {
     major: usize,
     minor: usize,
@@ -42,14 +44,19 @@ impl SemanticVersion {
         Ok(version)
     }
 
-    pub fn bump_major(&mut self) {
-        self.major += 1;
-    }
-    pub fn bump_minor(&mut self) {
-        self.minor += 1;
-    }
-    pub fn bump_patch(&mut self) {
-        self.patch += 1;
+    pub fn bump(&mut self, bumplevel: BumpLevel) {
+        match bumplevel {
+            BumpLevel::Patch => {
+                self.patch += 1;
+            }
+            BumpLevel::Minor => {
+                self.minor += 1;
+            }
+            BumpLevel::Major => {
+                self.major += 1;
+            }
+            BumpLevel::None => (),
+        };
     }
 }
 
@@ -78,21 +85,28 @@ mod tests {
     #[test]
     fn bump_major() {
         let mut a = SemanticVersion::new("1.2.3").unwrap();
-        a.bump_major();
+        a.bump(BumpLevel::Major);
         assert_eq!(a.to_string(), "2.2.3");
     }
 
     #[test]
     fn bump_minor() {
         let mut a = SemanticVersion::new("1.2.3").unwrap();
-        a.bump_minor();
+        a.bump(BumpLevel::Minor);
         assert_eq!(a.to_string(), "1.3.3");
     }
 
     #[test]
     fn bump_patch() {
         let mut a = SemanticVersion::new("1.2.3").unwrap();
-        a.bump_patch();
+        a.bump(BumpLevel::Patch);
         assert_eq!(a.to_string(), "1.2.4");
+    }
+
+    #[test]
+    fn bump_none() {
+        let mut a = SemanticVersion::new("1.2.3").unwrap();
+        a.bump(BumpLevel::None);
+        assert_eq!(a.to_string(), "1.2.3");
     }
 }

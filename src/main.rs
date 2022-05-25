@@ -7,7 +7,7 @@ mod git;
 mod semver;
 
 fn main() {
-    let v = SemanticVersion::new("1.2.3").unwrap();
+    let mut v = SemanticVersion::new("1.2.3").unwrap();
     println!("Hello, world! {}", v.to_string());
 
     let cli_context = CliContext::new().expect("Failed to build CLI Context");
@@ -27,7 +27,12 @@ fn main() {
         });
 
         let bumplevel = calc_bumplevel(&relevant_commits);
-        println!("bump level: {:?}", bumplevel);
+        v.bump(bumplevel);
+        println!(
+            "bump level: {:?} => next version: {}",
+            bumplevel,
+            v.to_string()
+        );
     } else {
         println!("Found no commits since the last tag")
     }
