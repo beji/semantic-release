@@ -1,5 +1,5 @@
 use crate::cli::CliContext;
-use crate::git::GitContext;
+use crate::git::{calc_bumplevel, GitContext};
 use crate::semver::SemanticVersion;
 
 mod cli;
@@ -25,6 +25,9 @@ fn main() {
         relevant_commits.iter().for_each(|commit| {
             println!("commit: {:?}", commit);
         });
+
+        let bumplevel = calc_bumplevel(&relevant_commits);
+        println!("bump level: {:?}", bumplevel);
     } else {
         println!("Found no commits since the last tag")
     }
