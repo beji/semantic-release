@@ -16,6 +16,7 @@ impl fmt::Display for SemanticVersion {
 
 impl SemanticVersion {
     pub fn new(version_str: &str) -> Result<SemanticVersion, &'static str> {
+        println!("Trying to parse: {}", version_str);
         let split = version_str.split(".");
         if split.clone().count() < 3 {
             return Err(
@@ -80,6 +81,8 @@ mod tests {
         let a_sv = a.as_ref().unwrap();
         assert!(a.is_ok());
         assert_eq!(a_sv.to_string(), "1.2.3");
+        let b = SemanticVersion::new("0.0.0").unwrap();
+        assert_eq!(b.to_string(), "0.0.0");
     }
 
     #[test]

@@ -1,15 +1,14 @@
 use crate::cli::CliContext;
 use crate::git::{calc_bumplevel, GitContext};
+use crate::projectparse::Project;
 use crate::semver::SemanticVersion;
 
 mod cli;
 mod git;
+mod projectparse;
 mod semver;
 
 fn main() {
-    let mut v = SemanticVersion::new("1.2.3").unwrap();
-    println!("Hello, world! {}", v.to_string());
-
     let cli_context = CliContext::new().expect("Failed to build CLI Context");
 
     println!("Looking for a git repo at (or above) {}", cli_context.path);
@@ -27,12 +26,21 @@ fn main() {
         });
 
         let bumplevel = calc_bumplevel(&relevant_commits);
-        v.bump(bumplevel);
-        println!(
-            "bump level: {:?} => next version: {}",
-            bumplevel,
-            v.to_string()
-        );
+
+        let mut project = Project::new(&cli_context.path);
+        if project.read_project_version() {
+            let mut version = SemanticVersion::new(&project.version_string)
+                .expect("Failed to parse version string");
+            version.bump(bumplevel);
+
+            println!(
+                "bump level: {:?} => next version: {}",
+                bumplevel,
+                version.to_string()
+            );
+        } else {
+            panic!("Failed to find a version string");
+        }
     } else {
         println!("Found no commits since the last tag")
     }
