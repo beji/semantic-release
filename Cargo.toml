@@ -9,3 +9,5 @@ edition = "2021"
 git2 = "0.14"
 clap = {version = "3.1.18", default-features = false, features = ["std", "cargo"] }
 regex = "1.5.6"
+console = "0.15.0"
+lazy_static = "1.4.0"

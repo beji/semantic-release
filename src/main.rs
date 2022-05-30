@@ -1,3 +1,8 @@
+#[macro_use]
+extern crate lazy_static;
+
+use console::style;
+
 use crate::cli::CliContext;
 use crate::git::{calc_bumplevel, GitContext};
 use crate::projectparse::{Project, ProjectType};
@@ -13,14 +18,14 @@ fn main() {
 
     cli_context.log_info(format!(
         "Looking for a git repo at (or above) {}",
-        cli_context.path
+        style(&cli_context.path).bold()
     ));
-    let git_context = GitContext::new(&cli_context.path);
+    let git_context = GitContext::new(&cli_context);
 
     let latest = git_context.get_latest_tag(&cli_context.tag_prefix).unwrap();
     cli_context.log_info(format!(
-        "Found tag '{}', will use that as base",
-        latest.name
+        "Found tag {}, will use that as base",
+        style(&latest.name).bold()
     ));
 
     let relevant_commits = git_context.get_commits_since_tag(latest);
@@ -46,7 +51,7 @@ fn main() {
             cli_context.log_debug(format!(
                 "bump level: {:?} => next version: {}",
                 bumplevel,
-                version.to_string()
+                style(&version.to_string()).bold()
             ));
         } else {
             panic!("Failed to find a version string");

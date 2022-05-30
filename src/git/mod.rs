@@ -1,6 +1,9 @@
 use std::{fs::canonicalize, path::Path};
 
+use console::style;
 use git2::{DiffFormat, DiffOptions, Oid, Repository};
+
+use crate::cli::CliContext;
 
 #[derive(Debug, PartialEq, PartialOrd, Eq, Ord, Clone, Copy)]
 pub enum BumpLevel {
@@ -10,14 +13,15 @@ pub enum BumpLevel {
     Major,
 }
 
-pub struct GitContext {
+pub struct GitContext<'a> {
     repo: Repository,
     sub_path: String,
+    cli_context: &'a CliContext,
 }
 
-impl GitContext {
-    pub fn new(path: &str) -> GitContext {
-        let path = Path::new(path);
+impl GitContext<'_> {
+    pub fn new<'a>(cli_context: &'a CliContext) -> GitContext<'a> {
+        let path = Path::new(&cli_context.path);
         let path = canonicalize(&path).expect("Failed to canonicalize input path");
 
         let repo = Repository::discover(&path).expect(&format!(
@@ -32,12 +36,26 @@ impl GitContext {
             .to_str()
             .expect("Failed to build string from repo path");
 
+        cli_context.log_info(format!(
+            "Found a git repository at {}",
+            style(&repo_path).bold()
+        ));
+
         let sub_path = path
             .display()
             .to_string()
             .replace(&format!("{}/", repo_path), "");
 
-        GitContext { repo, sub_path }
+        cli_context.log_info(format!(
+            "Working with the relative repository path {}",
+            style(&sub_path).bold()
+        ));
+
+        GitContext {
+            repo,
+            sub_path,
+            cli_context,
+        }
     }
 
     pub fn get_latest_tag(&self, prefix: &str) -> Option<GitTag> {
