@@ -1,6 +1,6 @@
 use crate::cli::CliContext;
 use crate::git::{calc_bumplevel, GitContext};
-use crate::projectparse::Project;
+use crate::projectparse::{Project, ProjectType};
 use crate::semver::SemanticVersion;
 
 mod cli;
@@ -28,6 +28,10 @@ fn main() {
         let bumplevel = calc_bumplevel(&relevant_commits);
 
         let mut project = Project::new(&cli_context.path);
+
+        if project.project_type == ProjectType::Unknown {
+            panic!("The project type isn't currently implemented");
+        }
         if project.read_project_version() {
             let mut version = SemanticVersion::new(&project.version_string)
                 .expect("Failed to parse version string");

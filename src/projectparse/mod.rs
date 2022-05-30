@@ -1,4 +1,3 @@
-use lazy_static::lazy_static;
 use regex::Regex;
 use std::{
     fs::{self, File},
@@ -6,6 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[derive(PartialEq)]
 pub enum ProjectType {
     Cargo,
     NodeJs,
@@ -38,10 +38,12 @@ impl Project {
             if filename.ends_with("Cargo.toml") {
                 project_type = ProjectType::Cargo;
                 project_file = entry.path();
+                println!("Found a cargo project");
                 break;
             } else if filename.ends_with("package.json") {
                 project_type = ProjectType::NodeJs;
                 project_file = entry.path();
+                println!("Found a node project");
                 break;
             }
         }
@@ -54,12 +56,7 @@ impl Project {
         }
     }
 
-    fn read_project_version_node(&mut self) -> bool {
-        lazy_static! {
-            // TODO: Figure out how to match " here
-            static ref NODE_RE: Regex = Regex::new(r"\s*.version.\s*:\s*.([0-9]{1,}\.[0-9]{1,}\.[0-0{1,}]).*").unwrap();
-        }
-
+    fn read_project_version_regex(&mut self, re: Regex) -> bool {
         let filename = &self.project_file;
         let file = File::open(filename).expect("Failed to open project file");
         let reader = BufReader::new(file);
@@ -68,7 +65,7 @@ impl Project {
 
         for (index, line) in reader.lines().enumerate() {
             let line = line.expect("Failed to get a single line from the project file");
-            match NODE_RE.captures(&line) {
+            match re.captures(&line) {
                 Some(cap) => {
                     // 0 is the whole line, 1 is the capture group we care about
                     let cap = &cap[1];
@@ -84,9 +81,16 @@ impl Project {
         has_match
     }
 
+    // TODO: Find out if this can be done better with traits
     pub fn read_project_version(&mut self) -> bool {
+        // TODO: Figure out how to match " in the regexes (. is used for now)
         match self.project_type {
-            ProjectType::NodeJs => self.read_project_version_node(),
+            ProjectType::NodeJs => self.read_project_version_regex(
+                Regex::new(r"\s*.version.\s*:\s*.([0-9]{1,}\.[0-9]{1,}\.[0-0{1,}]).*").unwrap(),
+            ),
+            ProjectType::Cargo => self.read_project_version_regex(
+                Regex::new(r"version\s*=\s*.([0-9]{1,}\.[0-9]{1,}\.[0-0{1,}]).*").unwrap(),
+            ),
             _ => panic!("No idea how to read project type"),
         }
     }
