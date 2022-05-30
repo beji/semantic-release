@@ -21,7 +21,7 @@ lazy_static! {
 impl CliContext {
     pub fn new() -> Result<CliContext, &'static str> {
         let matches = command!()
-            .arg(arg!(-p --path <PATH> "Path to the subproject to release"))
+            .arg(arg!([PATH] "Path to the subproject to release"))
             .arg(arg!(-t --tag <TAGPREFIX> "Prefix of the tags to be matched"))
             .arg(arg!(-v --verbose ... "Log debug informations"))
             .get_matches();
@@ -31,7 +31,7 @@ impl CliContext {
             _ => LogLevel::DEBUG,
         };
 
-        match matches.value_of("path") {
+        match matches.value_of("PATH") {
             Some(path) => match matches.value_of("tag") {
                 Some(tag_prefix) => Ok(CliContext {
                     path: path.to_owned(),
