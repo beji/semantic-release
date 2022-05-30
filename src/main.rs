@@ -11,19 +11,25 @@ mod semver;
 fn main() {
     let cli_context = CliContext::new().expect("Failed to build CLI Context");
 
-    println!("Looking for a git repo at (or above) {}", cli_context.path);
+    cli_context.log_info(format!(
+        "Looking for a git repo at (or above) {}",
+        cli_context.path
+    ));
     let git_context = GitContext::new(&cli_context.path);
 
     let latest = git_context.get_latest_tag(&cli_context.tag_prefix).unwrap();
-    println!("Found tag '{}', will use that as base", latest.name);
+    cli_context.log_info(format!(
+        "Found tag '{}', will use that as base",
+        latest.name
+    ));
 
     let relevant_commits = git_context.get_commits_since_tag(latest);
 
     if relevant_commits.len() != 0 {
-        println!("Found the following relevant commits:");
-        relevant_commits.iter().for_each(|commit| {
-            println!("commit: {:?}", commit);
-        });
+        cli_context.log_debug("Found the following relevant commits:".to_string());
+        relevant_commits
+            .iter()
+            .for_each(|commit| cli_context.log_debug(format!("commit: {:?}", commit)));
 
         let bumplevel = calc_bumplevel(&relevant_commits);
 
@@ -37,15 +43,15 @@ fn main() {
                 .expect("Failed to parse version string");
             version.bump(bumplevel);
 
-            println!(
+            cli_context.log_debug(format!(
                 "bump level: {:?} => next version: {}",
                 bumplevel,
                 version.to_string()
-            );
+            ));
         } else {
             panic!("Failed to find a version string");
         }
     } else {
-        println!("Found no commits since the last tag")
+        cli_context.log_info("Found no commits since the last tag".to_string())
     }
 }
