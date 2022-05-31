@@ -55,6 +55,9 @@ fn main() {
             ));
 
             project.update_project_version_file(&version);
+
+            let commit_id = git_context.commit_release(&version, &project.project_file);
+            git_context.tag_release(&version, &commit_id);
         } else {
             panic!("Failed to find a version string");
         }

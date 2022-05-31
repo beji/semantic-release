@@ -1,9 +1,12 @@
-use std::{fs::canonicalize, path::Path};
+use std::{
+    fs::canonicalize,
+    path::{Path, PathBuf},
+};
 
 use console::style;
-use git2::{DiffFormat, DiffOptions, Oid, Repository};
+use git2::{DiffFormat, DiffOptions, ObjectType, Oid, Repository, Signature};
 
-use crate::cli::CliContext;
+use crate::{cli::CliContext, semver::SemanticVersion};
 
 #[derive(Debug, PartialEq, PartialOrd, Eq, Ord, Clone, Copy)]
 pub enum BumpLevel {
@@ -22,29 +25,19 @@ pub struct GitContext<'a> {
 impl GitContext<'_> {
     pub fn new<'a>(cli_context: &'a CliContext) -> GitContext<'a> {
         let path = Path::new(&cli_context.path);
-        let path = canonicalize(&path).expect("Failed to canonicalize input path");
+        // let path = canonicalize(&path).expect("Failed to canonicalize input path");
 
         let repo = Repository::discover(&path).expect(&format!(
             "Failed to open a git repo at {}, is this a git repo?",
-            path.as_path().display()
+            path.display()
         ));
-
-        let repo_path = repo
-            .path()
-            .parent()
-            .expect("Failed to move up from the discovered repository")
-            .to_str()
-            .expect("Failed to build string from repo path");
 
         cli_context.log_info(format!(
             "Found a git repository at {}",
-            style(&repo_path).bold()
+            style(repo.path().display()).bold()
         ));
 
-        let sub_path = path
-            .display()
-            .to_string()
-            .replace(&format!("{}/", repo_path), "");
+        let sub_path = path_relative_to_repo(&repo, path);
 
         cli_context.log_info(format!(
             "Working with the relative repository path {}",
@@ -145,6 +138,59 @@ impl GitContext<'_> {
             })
             .collect()
     }
+
+    pub fn commit_release(&self, version: &SemanticVersion, project_file: &PathBuf) -> Oid {
+        let version = version.to_string();
+        // FIXME: Properly implement the user/password
+        let sig = Signature::now("Semantic release", "semantic@relea.se").unwrap();
+        let mut index = self.repo.index().expect("Failed to get repo index");
+        let project_file = Path::new(project_file);
+        let project_file = path_relative_to_repo(&self.repo, &project_file);
+
+        index
+            .add_path(Path::new(&project_file))
+            .expect("Failed to add path to index");
+        index.write().expect("Failed to write index");
+        let tree_oid = index.write_tree().expect("Failed to write git tree");
+        let tree = self
+            .repo
+            .find_tree(tree_oid)
+            .expect("Failed to get tree by oid");
+
+        let parent_commit = self.repo.head().unwrap().peel_to_commit().unwrap();
+
+        let result_id = self
+            .repo
+            .commit(
+                Some("HEAD"),
+                &sig,
+                &sig,
+                format!("[Semantic release]: Release {}", version.as_str()).as_str(),
+                &tree,
+                &[&parent_commit],
+            )
+            .expect("Failed to commit changes");
+
+        self.cli_context
+            .log_debug(format!("Created git commit {}", result_id));
+
+        result_id
+    }
+
+    pub fn tag_release(&self, version: &SemanticVersion, oid: &Oid) {
+        let version = version.to_string();
+        let object = self
+            .repo
+            .find_object(*oid, Some(ObjectType::Commit))
+            .expect("Failed to find git object by oid");
+        let tag_name = format!("{}{}", self.cli_context.tag_prefix, version.as_str());
+        self.repo
+            .tag_lightweight(tag_name.as_str(), &object, false)
+            .expect("Failed to tag release");
+
+        self.cli_context
+            .log_info(format!("Created tag {}", tag_name));
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -198,6 +244,23 @@ pub fn calc_bumplevel(commits: &Vec<GitCommit>) -> BumpLevel {
         commits.iter().map(|commit| commit.to_bumplevel()).collect();
     bumplevels.sort();
     bumplevels.last().expect("Failed to get last element from bumplevels list; Most likely calc_bumplevel was called on an empty list").clone()
+}
+
+pub fn path_relative_to_repo(repo: &Repository, path: &Path) -> String {
+    let path = canonicalize(&path).expect("Failed to canonicalize input path");
+
+    let repo_path = repo
+        .path()
+        .parent()
+        .expect("Failed to move up from the discovered repository")
+        .to_str()
+        .expect("Failed to build string from repo path");
+
+    let sub_path = path
+        .display()
+        .to_string()
+        .replace(&format!("{}/", repo_path), "");
+    sub_path
 }
 
 #[cfg(test)]

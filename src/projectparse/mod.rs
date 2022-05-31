@@ -17,7 +17,7 @@ pub enum ProjectType {
 
 pub struct Project {
     pub project_type: ProjectType,
-    project_file: PathBuf,
+    pub project_file: PathBuf,
     found_line: usize,
     pub version_string: String,
 }
