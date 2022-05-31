@@ -140,6 +140,8 @@ impl Project {
 
         // io::copy lead to bad file descriptor issues (maybe one of the file handles is closed before the copy happens?)
         fs::copy(tmpfile.path(), Path::new(filename)).expect("failed to copy");
-        project_file.set_permissions(permissions);
+        project_file
+            .set_permissions(permissions)
+            .expect("Failed to set file permissions");
     }
 }
