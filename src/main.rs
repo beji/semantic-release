@@ -48,16 +48,20 @@ fn main() {
                 .expect("Failed to parse version string");
             version.bump(bumplevel);
 
-            cli_context.log_debug(format!(
+            cli_context.log_info(format!(
                 "bump level: {:?} => next version: {}",
-                bumplevel,
+                style(&bumplevel).bold(),
                 style(&version.to_string()).bold()
             ));
 
-            project.update_project_version_file(&version);
+            if cli_context.dryrun {
+                cli_context.log_info("Dry run activated, not proceeding any further".to_string());
+            } else {
+                project.update_project_version_file(&version);
 
-            let commit_id = git_context.commit_release(&version, &project.project_file);
-            git_context.tag_release(&version, &commit_id);
+                let commit_id = git_context.commit_release(&version, &project.project_file);
+                git_context.tag_release(&version, &commit_id);
+            }
         } else {
             panic!("Failed to find a version string");
         }
