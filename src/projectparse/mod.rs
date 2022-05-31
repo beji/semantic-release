@@ -86,7 +86,7 @@ impl Project {
         // TODO: Figure out how to match " in the regexes (. is used for now)
         match self.project_type {
             ProjectType::NodeJs => self.read_project_version_regex(
-                Regex::new(r"\s*.version.\s*:\s*.([0-9]{1,}\.[0-9]{1,}\.[0-0{1,}]).*").unwrap(),
+                Regex::new(r"\s*.version.\s*:\s*.([0-9]{1,}\.[0-9]{1,}\.[0-9]{1,}).*").unwrap(),
             ),
             ProjectType::Cargo => self.read_project_version_regex(
                 Regex::new(r"version\s*=\s*.([0-9]{1,}\.[0-9]{1,}\.[0-0{1,}]).*").unwrap(),
