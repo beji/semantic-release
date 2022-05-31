@@ -18,7 +18,7 @@ pub enum BumpLevel {
 
 pub struct GitContext<'a> {
     repo: Repository,
-    sub_path: String,
+    sub_path: Option<String>,
     cli_context: &'a CliContext,
 }
 
@@ -39,10 +39,13 @@ impl GitContext<'_> {
 
         let sub_path = path_relative_to_repo(&repo, path);
 
-        cli_context.log_info(format!(
-            "Working with the relative repository path {}",
-            style(&sub_path).bold()
-        ));
+        match &sub_path {
+            Some(sub_path) => cli_context.log_info(format!(
+                "Working with the relative repository path {}",
+                style(&sub_path).bold()
+            )),
+            None => cli_context.log_info("Working from the repository root".to_string()),
+        }
 
         GitContext {
             repo,
@@ -112,14 +115,20 @@ impl GitContext<'_> {
 
                 let mut is_relevant = false;
 
-                diff.print(DiffFormat::NameOnly, |_delta, _hunk, line| {
-                    let changed_file = String::from_utf8_lossy(line.content());
-                    if changed_file.starts_with(&self.sub_path) {
-                        is_relevant = true;
-                    }
-                    true
-                })
-                .expect("Failed to print the delta");
+                match &self.sub_path {
+                    // Working with a subdir, need to check every commit
+                    Some(sub_path) => diff
+                        .print(DiffFormat::NameOnly, |_delta, _hunk, line| {
+                            let changed_file = String::from_utf8_lossy(line.content());
+                            if changed_file.starts_with(sub_path.as_str()) {
+                                is_relevant = true;
+                            }
+                            true
+                        })
+                        .expect("Failed to print the delta"),
+                    // Working from the root dir, every commit is relevant by definition
+                    None => is_relevant = true,
+                }
 
                 let body = match commit.body() {
                     Some(body) => Some(body.to_owned()),
@@ -147,7 +156,8 @@ impl GitContext<'_> {
             .expect("Failed to get signature from repo");
         let mut index = self.repo.index().expect("Failed to get repo index");
         let project_file = Path::new(project_file);
-        let project_file = path_relative_to_repo(&self.repo, &project_file);
+        let project_file = path_relative_to_repo(&self.repo, &project_file)
+            .expect("Failed to build a relative path for the project file");
 
         index
             .add_path(Path::new(&project_file))
@@ -248,7 +258,7 @@ pub fn calc_bumplevel(commits: &Vec<GitCommit>) -> BumpLevel {
     bumplevels.last().expect("Failed to get last element from bumplevels list; Most likely calc_bumplevel was called on an empty list").clone()
 }
 
-pub fn path_relative_to_repo(repo: &Repository, path: &Path) -> String {
+pub fn path_relative_to_repo(repo: &Repository, path: &Path) -> Option<String> {
     let path = canonicalize(&path).expect("Failed to canonicalize input path");
 
     let repo_path = repo
@@ -258,11 +268,20 @@ pub fn path_relative_to_repo(repo: &Repository, path: &Path) -> String {
         .to_str()
         .expect("Failed to build string from repo path");
 
-    let sub_path = path
-        .display()
-        .to_string()
-        .replace(&format!("{}/", repo_path), "");
-    sub_path
+    println!("repo_path {}", repo_path);
+
+    println!("path.display {}", path.display());
+
+    // Equal paths means that the path given here is equal to the git project root
+    if repo_path == path.display().to_string() {
+        None
+    } else {
+        let sub_path = path
+            .display()
+            .to_string()
+            .replace(&format!("{}/", repo_path), "");
+        Some(sub_path)
+    }
 }
 
 #[cfg(test)]
