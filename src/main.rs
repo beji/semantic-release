@@ -53,6 +53,8 @@ fn main() {
                 bumplevel,
                 style(&version.to_string()).bold()
             ));
+
+            project.update_project_version_file(&version);
         } else {
             panic!("Failed to find a version string");
         }

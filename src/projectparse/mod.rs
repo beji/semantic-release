@@ -1,9 +1,12 @@
 use regex::Regex;
 use std::{
     fs::{self, File},
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Error, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
 };
+use tempfile::NamedTempFile;
+
+use crate::semver::SemanticVersion;
 
 #[derive(PartialEq)]
 pub enum ProjectType {
@@ -93,5 +96,50 @@ impl Project {
             ),
             _ => panic!("No idea how to read project type"),
         }
+    }
+
+    pub fn update_project_version_file(&self, next_version: &SemanticVersion) {
+        let filename = &self.project_file;
+        let mut project_file = File::open(filename).expect("Failed to open project file");
+        // Need to preserve correct permissions (maybe, not sure actually)
+        let permissions = project_file
+            .metadata()
+            .expect("Failed to read project file metadata")
+            .permissions();
+        let reader = BufReader::new(&mut project_file);
+        let mut lines: Vec<String> = vec![];
+
+        let new_version_line = match self.project_type {
+            ProjectType::NodeJs => format!("  \"version\": \"{}\",", next_version.to_string()),
+            ProjectType::Cargo => format!("version = \"{}\"", next_version.to_string()),
+            _ => panic!("No idea how to write project type"),
+        };
+
+        for (index, line) in reader.lines().enumerate() {
+            if index == self.found_line {
+                lines.push(new_version_line.clone());
+            } else {
+                let line = line.expect("Failed to read line");
+                lines.push(line);
+            }
+        }
+
+        // Push an empty string so the join creates a newline at the file end
+        lines.push("".to_string());
+
+        // Can't use the basic tempfile::tempfile() as that doesn't expose the file path
+        // We need that to use fs::copy, see below
+        let mut tmpfile = NamedTempFile::new().expect("Failed to create temporary file");
+        let new_content = lines.join("\n");
+
+        let written = tmpfile
+            .write(new_content.as_bytes())
+            .expect("Failed to write to temporary file");
+
+        println!("written bytes: {}", written);
+
+        // io::copy lead to bad file descriptor issues (maybe one of the file handles is closed before the copy happens?)
+        fs::copy(tmpfile.path(), Path::new(filename)).expect("failed to copy");
+        project_file.set_permissions(permissions);
     }
 }
