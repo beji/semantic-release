@@ -141,8 +141,10 @@ impl GitContext<'_> {
 
     pub fn commit_release(&self, version: &SemanticVersion, project_file: &PathBuf) -> Oid {
         let version = version.to_string();
-        // FIXME: Properly implement the user/password
-        let sig = Signature::now("Semantic release", "semantic@relea.se").unwrap();
+        let sig = self
+            .repo
+            .signature()
+            .expect("Failed to get signature from repo");
         let mut index = self.repo.index().expect("Failed to get repo index");
         let project_file = Path::new(project_file);
         let project_file = path_relative_to_repo(&self.repo, &project_file);
