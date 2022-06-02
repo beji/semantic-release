@@ -1,0 +1,98 @@
+#+title: semantic-release
+#+subtitle: Automated version handling for repos & monorepos
+#+author: Björn Erlwein
+
+[[https://semver.org/][Semantic Versioning]] is difficult for a lot of people and somewhat error prone. This automates the process, given the commit messages follow a certain [[template]], allowing automation of the process in a pipeline or something.
+
+* Supported project types
+- Cargo (Cargo.toml)
+- NPM (package.json)
+
+* Is this ready for general use
+
+Most likely not, I'd recommend [[https://github.com/semantic-release/semantic-release][semantic-release/semantic-release]] for most people. My tool works fine for my use cases but I can't speak for anything else.
+Might work well, might delete everything you love and cherish, be careful.
+
+* <<template>>The commit template
+
+This is somewhat based on the [[https://github.com/angular/angular/blob/main/CONTRIBUTING.md#-commit-message-format][Angular Commit Message Format]] but not as extensive.
+
+Every commit that counts towards a new release should have a summary starting with something like this:
+
+#+begin_src
+<type>(<scope>): <summary>
+#+end_src
+
+The ~type~ field is mandatory, ~scope~ is optional. ~summary~ is where the usual commit message would go. The ~scope~ field doesn't really have a semantic purpose but may be used to categorize commits
+into certain features/parts of the project.
+
+Supported values for ~type~ are:
+
+- *feat*: Marks a new feature or general improvement, this will lead to a bump in the ~MINOR~ version
+- *fix*: A bug fix, this will lead to a bump in the ~PATCH~ version
+
+Breaking changes can be marked by putting the String ~BREAKING CHANGE:~ somewhere in the commit message body. This will override whatever ~type~ was given and lead to a bump in the ~MAJOR~ version
+
+* How do I use this
+
+#+begin_src sh :results output code
+cargo run -- --help
+#+end_src
+
+#+RESULTS:
+#+begin_src sh
+semantic-release 0.1.0
+
+USAGE:
+    semantic-release [OPTIONS] [--] [PATH]
+
+ARGS:
+    <PATH>    Path to the subproject to release
+
+OPTIONS:
+    -d, --dry                     Dry run (don't actually change files or do git commits/tags)
+    -h, --help                    Print help information
+    -t, --tag [<TAGPREFIX>...]    Prefix of the tags to be matched [default: ]
+    -v, --verbose                 Log debug informations
+    -V, --version                 Print version information
+#+end_src
+
+** Single repo
+
+In the easiest use case this can simply be pointed at a repository like this: ~semantic-release ~/path/to/repo~, it will then figure out the repo format and latest tag and analzye the commits from then to ~HEAD~.
+
+** Monorepo
+
+In the *monorepo* case you can also point this at a subpath. Given the following repo structure:
+
+#+begin_src
+~/path/to/repo
+          ├── npm-project
+          └── rust-project
+#+end_src
+
+You can do ~semantic-release --tag="rust-project-" ~/path/to/repo/rust-project~ and the tool will filter commits to the relevant subpath ~rust-project~. This allows you to handle both projects independently.
+Note the ~--tag~ given to the command. This serves as a prefix to the tags and is used to distinguish between the two sub projects. Giving a prefix like this will result in tags like ~rust-project-0.1.0~.
+While not strictly necessary for a monorepo, this is highly recommended for this tool to function properly.
+
+* TODOs
+
+- Replace most/all ~panic!~'s with better messages to the user (and maybe better handling than just crashing)
+- Replace most/all ~expect()~'s with better messages to the user (and maybe better handling than just crashing)
+
+* Planned features
+
+- Do something useful if no initial tag exists
+- Add support for pom.xml based projects
+
+* Maybe planned features
+
+- Write a Changelog file. This might be better handled by an additional tool.
+- Push to the git repo after commit/tag. Highly depends on the whole Changelog feature happening or not
+- prebuilt binaries
+
+* Not happening here
+
+- Publish to NPM/Cargo/Maven/Whatever
+- Dependent package support (~b~ depends on ~a~ so a bump for ~a~ should also update & bump ~b~) for monorepos
+- prebuilt mac binaries. I don't have a device for that
