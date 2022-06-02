@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate lazy_static;
 
+use cli::logger::Logger;
 use console::style;
 
 use crate::cli::CliContext;
@@ -15,15 +16,18 @@ mod semver;
 
 fn main() {
     let cli_context = CliContext::new().expect("Failed to build CLI Context");
+    let logger = Logger::new(cli_context.log_level);
 
-    cli_context.log_info(format!(
+    logger.log_info(format!(
         "Looking for a git repo at (or above) {}",
         style(&cli_context.path).bold()
     ));
-    let git_context = GitContext::new(&cli_context);
+    let git_context = GitContext::new(cli_context.path.as_str(), &logger);
 
-    let latest = git_context.get_latest_tag(&cli_context.tag_prefix).unwrap();
-    cli_context.log_info(format!(
+    let latest = git_context
+        .get_latest_tag(cli_context.tag_prefix.as_str())
+        .unwrap();
+    logger.log_info(format!(
         "Found tag {}, will use that as base",
         style(&latest.name).bold()
     ));
@@ -31,10 +35,10 @@ fn main() {
     let relevant_commits = git_context.get_commits_since_tag(latest);
 
     if relevant_commits.len() != 0 {
-        cli_context.log_debug("Found the following relevant commits:".to_string());
+        logger.log_debug("Found the following relevant commits:".to_string());
         relevant_commits
             .iter()
-            .for_each(|commit| cli_context.log_debug(format!("commit: {:?}", commit)));
+            .for_each(|commit| logger.log_debug(format!("commit: {:?}", commit)));
 
         let bumplevel = calc_bumplevel(&relevant_commits);
 
@@ -48,24 +52,24 @@ fn main() {
                 .expect("Failed to parse version string");
             version.bump(bumplevel);
 
-            cli_context.log_info(format!(
+            logger.log_info(format!(
                 "bump level: {:?} => next version: {}",
                 style(&bumplevel).bold(),
                 style(&version.to_string()).bold()
             ));
 
             if cli_context.dryrun {
-                cli_context.log_info("Dry run activated, not proceeding any further".to_string());
+                logger.log_info("Dry run activated, not proceeding any further".to_string());
             } else {
                 project.update_project_version_file(&version);
 
                 let commit_id = git_context.commit_release(&version, &project.project_file);
-                git_context.tag_release(&version, &commit_id);
+                git_context.tag_release(cli_context.tag_prefix.as_str(), &version, &commit_id);
             }
         } else {
             panic!("Failed to find a version string");
         }
     } else {
-        cli_context.log_info("Found no commits since the last tag".to_string())
+        logger.log_info("Found no commits since the last tag".to_string())
     }
 }

@@ -6,7 +6,7 @@ use std::{
 use console::style;
 use git2::{DiffFormat, DiffOptions, ObjectType, Oid, Repository, Signature};
 
-use crate::{cli::CliContext, semver::SemanticVersion};
+use crate::{cli::logger::Logger, semver::SemanticVersion};
 
 #[derive(Debug, PartialEq, PartialOrd, Eq, Ord, Clone, Copy)]
 pub enum BumpLevel {
@@ -19,12 +19,12 @@ pub enum BumpLevel {
 pub struct GitContext<'a> {
     repo: Repository,
     sub_path: Option<String>,
-    cli_context: &'a CliContext,
+    logger: &'a Logger,
 }
 
 impl GitContext<'_> {
-    pub fn new<'a>(cli_context: &'a CliContext) -> GitContext<'a> {
-        let path = Path::new(&cli_context.path);
+    pub fn new<'a>(path: &str, logger: &'a Logger) -> GitContext<'a> {
+        let path = Path::new(path);
         // let path = canonicalize(&path).expect("Failed to canonicalize input path");
 
         let repo = Repository::discover(&path).expect(&format!(
@@ -32,7 +32,7 @@ impl GitContext<'_> {
             path.display()
         ));
 
-        cli_context.log_info(format!(
+        logger.log_info(format!(
             "Found a git repository at {}",
             style(repo.path().display()).bold()
         ));
@@ -40,17 +40,17 @@ impl GitContext<'_> {
         let sub_path = path_relative_to_repo(&repo, path);
 
         match &sub_path {
-            Some(sub_path) => cli_context.log_info(format!(
+            Some(sub_path) => logger.log_info(format!(
                 "Working with the relative repository path {}",
                 style(&sub_path).bold()
             )),
-            None => cli_context.log_info("Working from the repository root".to_string()),
+            None => logger.log_info("Working from the repository root".to_string()),
         }
 
         GitContext {
             repo,
             sub_path,
-            cli_context,
+            logger,
         }
     }
 
@@ -183,25 +183,24 @@ impl GitContext<'_> {
             )
             .expect("Failed to commit changes");
 
-        self.cli_context
+        self.logger
             .log_debug(format!("Created git commit {}", result_id));
 
         result_id
     }
 
-    pub fn tag_release(&self, version: &SemanticVersion, oid: &Oid) {
+    pub fn tag_release(&self, tag_prefix: &str, version: &SemanticVersion, oid: &Oid) {
         let version = version.to_string();
         let object = self
             .repo
             .find_object(*oid, Some(ObjectType::Commit))
             .expect("Failed to find git object by oid");
-        let tag_name = format!("{}{}", self.cli_context.tag_prefix, version.as_str());
+        let tag_name = format!("{}{}", tag_prefix, version.as_str());
         self.repo
             .tag_lightweight(tag_name.as_str(), &object, false)
             .expect("Failed to tag release");
 
-        self.cli_context
-            .log_info(format!("Created tag {}", tag_name));
+        self.logger.log_info(format!("Created tag {}", tag_name));
     }
 }
 
