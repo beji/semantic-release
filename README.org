@@ -2,7 +2,7 @@
 #+subtitle: Automated version handling for repos & monorepos
 #+author: Björn Erlwein
 
-[[https://semver.org/][Semantic Versioning]] is difficult for a lot of people and somewhat error prone. This automates the process, given the commit messages follow a certain [[template]], allowing automation of the process in a pipeline or something.
+[[https://semver.org/][Semantic Versioning]] is difficult for a lot of people and somewhat error prone. This automates the process, given the commit messages follow a certain template (see below), allowing automation of the process in a pipeline or something.
 
 * Supported project types
 - Cargo (Cargo.toml)
@@ -13,7 +13,7 @@
 Most likely not, I'd recommend [[https://github.com/semantic-release/semantic-release][semantic-release/semantic-release]] for most people. My tool works fine for my use cases but I can't speak for anything else.
 Might work well, might delete everything you love and cherish, be careful.
 
-* <<template>>The commit template
+* The commit template
 
 This is somewhat based on the [[https://github.com/angular/angular/blob/main/CONTRIBUTING.md#-commit-message-format][Angular Commit Message Format]] but not as extensive.
 
