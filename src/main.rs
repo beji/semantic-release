@@ -42,13 +42,13 @@ fn main() {
 
         let bumplevel = calc_bumplevel(&relevant_commits);
 
-        let mut project = Project::new(&cli_context.path);
+        let mut project = Project::new(&cli_context.path, &logger);
 
         if project.project_type == ProjectType::Unknown {
             panic!("The project type isn't currently implemented");
         }
         if project.read_project_version() {
-            let mut version = SemanticVersion::new(&project.version_string)
+            let mut version = SemanticVersion::new(&project.version_string, &logger)
                 .expect("Failed to parse version string");
             version.bump(bumplevel);
 

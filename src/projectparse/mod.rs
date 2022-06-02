@@ -6,7 +6,7 @@ use std::{
 };
 use tempfile::NamedTempFile;
 
-use crate::semver::SemanticVersion;
+use crate::{cli::logger::Logger, semver::SemanticVersion};
 
 #[derive(PartialEq)]
 pub enum ProjectType {
@@ -15,15 +15,16 @@ pub enum ProjectType {
     Unknown,
 }
 
-pub struct Project {
+pub struct Project<'a> {
     pub project_type: ProjectType,
     pub project_file: PathBuf,
     found_line: usize,
     pub version_string: String,
+    logger: &'a Logger,
 }
 
-impl Project {
-    pub fn new(path: &str) -> Project {
+impl Project<'_> {
+    pub fn new<'a>(path: &'a str, logger: &'a Logger) -> Project<'a> {
         let path = Path::new(path);
         let entries = fs::read_dir(path)
             .expect(format!("Failed to read project dir {}", path.to_str().unwrap()).as_str());
@@ -41,12 +42,12 @@ impl Project {
             if filename.ends_with("Cargo.toml") {
                 project_type = ProjectType::Cargo;
                 project_file = entry.path();
-                println!("Found a cargo project");
+                logger.log_debug("Found a cargo project".to_string());
                 break;
             } else if filename.ends_with("package.json") {
                 project_type = ProjectType::NodeJs;
                 project_file = entry.path();
-                println!("Found a node project");
+                logger.log_debug("Found a node project".to_string());
                 break;
             }
         }
@@ -56,6 +57,7 @@ impl Project {
             project_file,
             found_line: usize::MAX,
             version_string: "".to_string(),
+            logger,
         }
     }
 
@@ -72,7 +74,12 @@ impl Project {
                 Some(cap) => {
                     // 0 is the whole line, 1 is the capture group we care about
                     let cap = &cap[1];
-                    println!("Matched '{}' at line {}", cap.to_string(), index);
+                    self.logger.log_debug(format!(
+                        "Matched '{}' at line {}",
+                        cap.to_string(),
+                        index
+                    ));
+
                     self.found_line = index;
                     self.version_string = cap.to_owned();
                     has_match = true;
@@ -136,7 +143,7 @@ impl Project {
             .write(new_content.as_bytes())
             .expect("Failed to write to temporary file");
 
-        println!("written bytes: {}", written);
+        self.logger.log_debug(format!("written bytes: {}", written));
 
         // io::copy lead to bad file descriptor issues (maybe one of the file handles is closed before the copy happens?)
         fs::copy(tmpfile.path(), Path::new(filename)).expect("failed to copy");

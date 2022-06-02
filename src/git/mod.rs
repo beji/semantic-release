@@ -267,10 +267,6 @@ pub fn path_relative_to_repo(repo: &Repository, path: &Path) -> Option<String> {
         .to_str()
         .expect("Failed to build string from repo path");
 
-    println!("repo_path {}", repo_path);
-
-    println!("path.display {}", path.display());
-
     // Equal paths means that the path given here is equal to the git project root
     if repo_path == path.display().to_string() {
         None

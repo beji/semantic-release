@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::git::BumpLevel;
+use crate::{cli::logger::Logger, git::BumpLevel};
 
 pub struct SemanticVersion {
     major: usize,
@@ -15,8 +15,8 @@ impl fmt::Display for SemanticVersion {
 }
 
 impl SemanticVersion {
-    pub fn new(version_str: &str) -> Result<SemanticVersion, &'static str> {
-        println!("Trying to parse: {}", version_str);
+    pub fn new(version_str: &str, logger: &Logger) -> Result<SemanticVersion, &'static str> {
+        logger.log_debug(format!("Trying to parse: {}", version_str));
         let split = version_str.split(".");
         if split.clone().count() < 3 {
             return Err(
