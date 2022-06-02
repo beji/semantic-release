@@ -15,7 +15,7 @@ impl CliContext {
     pub fn new() -> Result<CliContext, &'static str> {
         let matches = command!()
             .arg(arg!([PATH] "Path to the subproject to release"))
-            .arg(arg!(-t --tag <TAGPREFIX> "Prefix of the tags to be matched"))
+            .arg(arg!(-t --tag [TAGPREFIX] "Prefix of the tags to be matched").default_value(""))
             .arg(arg!(-d --dry ... "Dry run (don't actually change files or do git commits/tags)"))
             .arg(arg!(-v --verbose ... "Log debug informations"))
             .get_matches();
