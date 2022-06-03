@@ -3,6 +3,7 @@ extern crate lazy_static;
 
 use cli::logger::Logger;
 use console::style;
+use git::BumpLevel;
 
 use crate::cli::CliContext;
 use crate::git::{calc_bumplevel, GitContext};
@@ -61,10 +62,16 @@ fn main() {
             if cli_context.dryrun {
                 logger.log_info("Dry run activated, not proceeding any further".to_string());
             } else {
-                project.update_project_version_file(&version);
+                if bumplevel == BumpLevel::None {
+                    logger.log_info(
+                        "No relevant tags found that have a matching format; nothing to do here",
+                    );
+                } else {
+                    project.update_project_version_file(&version);
 
-                let commit_id = git_context.commit_release(&version, &project.project_file);
-                git_context.tag_release(cli_context.tag_prefix.as_str(), &version, &commit_id);
+                    let commit_id = git_context.commit_release(&version, &project.project_file);
+                    git_context.tag_release(cli_context.tag_prefix.as_str(), &version, &commit_id);
+                }
             }
         } else {
             panic!("Failed to find a version string");
