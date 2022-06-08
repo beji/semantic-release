@@ -64,7 +64,8 @@ fn main() {
             } else {
                 if bumplevel == BumpLevel::None {
                     logger.log_info(
-                        "No relevant tags found that have a matching format; nothing to do here",
+                        "No relevant tags found that have a matching format; nothing to do here"
+                            .to_string(),
                     );
                 } else {
                     project.update_project_version_file(&version);
