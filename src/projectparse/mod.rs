@@ -12,6 +12,7 @@ use crate::{cli::logger::Logger, semver::SemanticVersion};
 pub enum ProjectType {
     Cargo,
     NodeJs,
+    PomXml,
     Unknown,
 }
 
@@ -49,6 +50,10 @@ impl Project<'_> {
                 project_file = entry.path();
                 logger.log_debug("Found a node project".to_string());
                 break;
+            } else if filename.ends_with("pom.xml") {
+                project_type = ProjectType::PomXml;
+                project_file = entry.path();
+                logger.log_debug("Found a maven project".to_string());
             }
         }
 
@@ -101,6 +106,9 @@ impl Project<'_> {
             ProjectType::Cargo => self.read_project_version_regex(
                 Regex::new(r"version\s*=\s*.([0-9]{1,}\.[0-9]{1,}\.[0-0{1,}]).*").unwrap(),
             ),
+            ProjectType::PomXml => self.read_project_version_regex(
+                Regex::new(r"<version>([0-9]{1,}\.[0-9]{1,}\.[0-0{1,}])</version>").unwrap(),
+            ),
             _ => panic!("No idea how to read project type"),
         }
     }
@@ -119,6 +127,7 @@ impl Project<'_> {
         let new_version_line = match self.project_type {
             ProjectType::NodeJs => format!("  \"version\": \"{}\",", next_version.to_string()),
             ProjectType::Cargo => format!("version = \"{}\"", next_version.to_string()),
+            ProjectType::PomXml => format!("  <version>{}</version>", next_version.to_string()),
             _ => panic!("No idea how to write project type"),
         };
 

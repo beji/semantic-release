@@ -83,7 +83,7 @@ While not strictly necessary for a monorepo, this is highly recommended for this
 * Planned features
 
 - Do something useful if no initial tag exists
-- Add support for pom.xml based projects
+- Support Suffixes like ~-dev~ or ~-SNAPSHOT~
 
 * Maybe planned features
 
