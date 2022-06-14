@@ -4,10 +4,12 @@ extern crate lazy_static;
 use cli::logger::Logger;
 use console::style;
 use git::BumpLevel;
+use projectparse::new_project;
 
 use crate::cli::CliContext;
 use crate::git::{calc_bumplevel, GitContext};
-use crate::projectparse::{Project, ProjectType};
+use crate::projectparse::Project;
+use crate::projectparse::ProjectType;
 use crate::semver::SemanticVersion;
 
 mod cli;
@@ -43,13 +45,13 @@ fn main() {
 
         let bumplevel = calc_bumplevel(&relevant_commits);
 
-        let mut project = Project::new(&cli_context.path, &logger);
+        let mut project = new_project(&cli_context.path, &logger);
 
-        if project.project_type == ProjectType::Unknown {
+        if project.get_project_type() == ProjectType::Unknown {
             panic!("The project type isn't currently implemented");
         }
         if project.read_project_version() {
-            let mut version = SemanticVersion::new(&project.version_string, &logger)
+            let mut version = SemanticVersion::new(project.get_version_string(), &logger)
                 .expect("Failed to parse version string");
             version.bump(bumplevel);
 
@@ -70,7 +72,8 @@ fn main() {
                 } else {
                     project.update_project_version_file(&version);
 
-                    let commit_id = git_context.commit_release(&version, &project.project_file);
+                    let commit_id =
+                        git_context.commit_release(&version, project.get_project_file());
                     git_context.tag_release(cli_context.tag_prefix.as_str(), &version, &commit_id);
                 }
             }

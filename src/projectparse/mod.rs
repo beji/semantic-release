@@ -1,12 +1,18 @@
 use regex::Regex;
 use std::{
     fs::{self, File},
-    io::{BufRead, BufReader, Error, Read, Seek, SeekFrom, Write},
+    io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
 };
 use tempfile::NamedTempFile;
 
 use crate::{cli::logger::Logger, semver::SemanticVersion};
+
+use self::{cargo::CargoProject, node::NodeProject, pom::PomProject};
+
+mod cargo;
+mod node;
+mod pom;
 
 #[derive(PartialEq)]
 pub enum ProjectType {
@@ -16,58 +22,10 @@ pub enum ProjectType {
     Unknown,
 }
 
-pub struct Project<'a> {
-    pub project_type: ProjectType,
-    pub project_file: PathBuf,
-    found_line: usize,
-    pub version_string: String,
-    logger: &'a Logger,
-}
-
-impl Project<'_> {
-    pub fn new<'a>(path: &'a str, logger: &'a Logger) -> Project<'a> {
-        let path = Path::new(path);
-        let entries = fs::read_dir(path)
-            .expect(format!("Failed to read project dir {}", path.to_str().unwrap()).as_str());
-
-        let mut project_type = ProjectType::Unknown;
-        let mut project_file = PathBuf::new();
-
-        for entry in entries {
-            let entry = entry.expect("Failed to get entry");
-
-            let filename = entry
-                .file_name()
-                .into_string()
-                .expect("Failed to parse file name to string");
-            if filename.ends_with("Cargo.toml") {
-                project_type = ProjectType::Cargo;
-                project_file = entry.path();
-                logger.log_debug("Found a cargo project".to_string());
-                break;
-            } else if filename.ends_with("package.json") {
-                project_type = ProjectType::NodeJs;
-                project_file = entry.path();
-                logger.log_debug("Found a node project".to_string());
-                break;
-            } else if filename.ends_with("pom.xml") {
-                project_type = ProjectType::PomXml;
-                project_file = entry.path();
-                logger.log_debug("Found a maven project".to_string());
-            }
-        }
-
-        Project {
-            project_type,
-            project_file,
-            found_line: usize::MAX,
-            version_string: "".to_string(),
-            logger,
-        }
-    }
-
+pub trait Project {
     fn read_project_version_regex(&mut self, re: Regex) -> bool {
-        let filename = &self.project_file;
+        let filename = &self.get_project_file();
+        let logger = &self.get_logger();
         let file = File::open(filename).expect("Failed to open project file");
         let reader = BufReader::new(file);
 
@@ -79,14 +37,10 @@ impl Project<'_> {
                 Some(cap) => {
                     // 0 is the whole line, 1 is the capture group we care about
                     let cap = &cap[1];
-                    self.logger.log_debug(format!(
-                        "Matched '{}' at line {}",
-                        cap.to_string(),
-                        index
-                    ));
+                    logger.log_debug(format!("Matched '{}' at line {}", cap.to_string(), index));
 
-                    self.found_line = index;
-                    self.version_string = cap.to_owned();
+                    self.set_found_line(index);
+                    self.set_version_string(cap.to_owned());
                     has_match = true;
                     break;
                 }
@@ -96,25 +50,8 @@ impl Project<'_> {
         has_match
     }
 
-    // TODO: Find out if this can be done better with traits
-    pub fn read_project_version(&mut self) -> bool {
-        // TODO: Figure out how to match " in the regexes (. is used for now)
-        match self.project_type {
-            ProjectType::NodeJs => self.read_project_version_regex(
-                Regex::new(r"\s*.version.\s*:\s*.([0-9]{1,}\.[0-9]{1,}\.[0-9]{1,}).*").unwrap(),
-            ),
-            ProjectType::Cargo => self.read_project_version_regex(
-                Regex::new(r"version\s*=\s*.([0-9]{1,}\.[0-9]{1,}\.[0-0{1,}]).*").unwrap(),
-            ),
-            ProjectType::PomXml => self.read_project_version_regex(
-                Regex::new(r"<version>([0-9]{1,}\.[0-9]{1,}\.[0-0{1,}])</version>").unwrap(),
-            ),
-            _ => panic!("No idea how to read project type"),
-        }
-    }
-
-    pub fn update_project_version_file(&self, next_version: &SemanticVersion) {
-        let filename = &self.project_file;
+    fn update_project_version_file(&self, next_version: &SemanticVersion) {
+        let filename = self.get_project_file();
         let mut project_file = File::open(filename).expect("Failed to open project file");
         // Need to preserve correct permissions (maybe, not sure actually)
         let permissions = project_file
@@ -124,15 +61,10 @@ impl Project<'_> {
         let reader = BufReader::new(&mut project_file);
         let mut lines: Vec<String> = vec![];
 
-        let new_version_line = match self.project_type {
-            ProjectType::NodeJs => format!("  \"version\": \"{}\",", next_version.to_string()),
-            ProjectType::Cargo => format!("version = \"{}\"", next_version.to_string()),
-            ProjectType::PomXml => format!("  <version>{}</version>", next_version.to_string()),
-            _ => panic!("No idea how to write project type"),
-        };
+        let new_version_line = self.build_project_line(next_version);
 
         for (index, line) in reader.lines().enumerate() {
-            if index == self.found_line {
+            if index == self.get_found_line() {
                 lines.push(new_version_line.clone());
             } else {
                 let line = line.expect("Failed to read line");
@@ -152,12 +84,64 @@ impl Project<'_> {
             .write(new_content.as_bytes())
             .expect("Failed to write to temporary file");
 
-        self.logger.log_debug(format!("written bytes: {}", written));
+        self.get_logger()
+            .log_debug(format!("written bytes: {}", written));
 
         // io::copy lead to bad file descriptor issues (maybe one of the file handles is closed before the copy happens?)
         fs::copy(tmpfile.path(), Path::new(filename)).expect("failed to copy");
         project_file
             .set_permissions(permissions)
             .expect("Failed to set file permissions");
+    }
+
+    fn read_project_version(&mut self) -> bool;
+    fn get_project_file(&self) -> &PathBuf;
+    fn get_logger(&self) -> &Logger;
+    fn set_found_line(&mut self, line: usize) -> ();
+    fn get_found_line(&self) -> usize;
+    fn get_version_string(&self) -> &str;
+    fn set_version_string(&mut self, version_string: String) -> ();
+    fn build_project_line(&self, next_version: &SemanticVersion) -> String;
+    fn get_project_type(&self) -> ProjectType;
+}
+
+pub fn new_project<'a>(path: &'a str, logger: &'a Logger) -> Box<dyn Project + 'a> {
+    let path = Path::new(path);
+    let entries = fs::read_dir(path)
+        .expect(format!("Failed to read project dir {}", path.to_str().unwrap()).as_str());
+
+    let mut project_type = ProjectType::Unknown;
+    let mut project_file = PathBuf::new();
+
+    for entry in entries {
+        let entry = entry.expect("Failed to get entry");
+
+        let filename = entry
+            .file_name()
+            .into_string()
+            .expect("Failed to parse file name to string");
+        if filename.ends_with("Cargo.toml") {
+            project_type = ProjectType::Cargo;
+            project_file = entry.path();
+            logger.log_debug("Found a cargo project".to_string());
+            break;
+        } else if filename.ends_with("package.json") {
+            project_type = ProjectType::NodeJs;
+            project_file = entry.path();
+            logger.log_debug("Found a node project".to_string());
+            break;
+        } else if filename.ends_with("pom.xml") {
+            project_type = ProjectType::PomXml;
+            project_file = entry.path();
+            logger.log_debug("Found a maven project".to_string());
+            break;
+        }
+    }
+
+    match project_type {
+        ProjectType::Cargo => Box::new(CargoProject::new(project_file, logger)),
+        ProjectType::NodeJs => Box::new(NodeProject::new(project_file, logger)),
+        ProjectType::PomXml => Box::new(PomProject::new(project_file, logger)),
+        _ => panic!("No idea how to read project type"),
     }
 }

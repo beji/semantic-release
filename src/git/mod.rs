@@ -159,6 +159,7 @@ impl GitContext<'_> {
         let project_file = path_relative_to_repo(&self.repo, &project_file)
             .expect("Failed to build a relative path for the project file");
 
+        // FIXME: This also needs to add Cargo.lock if a Cargo.toml was changed
         index
             .add_path(Path::new(&project_file))
             .expect("Failed to add path to index");
