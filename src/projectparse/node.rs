@@ -51,7 +51,7 @@ impl Project for NodeProject<'_> {
     }
 
     fn build_project_line(&self, next_version: &SemanticVersion) -> String {
-        format!("version = \"{}\"", next_version.to_string())
+        format!("  \"version\": \"{}\",", next_version.to_string())
     }
 
     fn get_project_type(&self) -> ProjectType {
