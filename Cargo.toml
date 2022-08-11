@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 git2 = "0.14"
-clap = {version = "3.1.18", default-features = false, features = ["std", "cargo"] }
+clap = {version = "3.2.16", default-features = false, features = ["std", "cargo"] }
 regex = "1.5.6"
 console = "0.15.1"
 lazy_static = "1.4.0"
