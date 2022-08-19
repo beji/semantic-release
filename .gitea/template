@@ -1,9 +1,0 @@
-# CI & Update stuff
-.woodpecker.yml
-renovate.json
-
-# Devshell
-flake.nix
-.envrc
-devshell.toml
-rustfmt.toml
