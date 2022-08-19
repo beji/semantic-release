@@ -7,8 +7,8 @@ lazy_static! {
 
 #[derive(Debug, PartialEq, PartialOrd, Eq, Ord, Clone, Copy)]
 pub enum LogLevel {
-    DEBUG,
-    INFO,
+    Debug,
+    Info,
 }
 
 pub struct Logger {
@@ -19,12 +19,12 @@ impl Logger {
         Logger { log_level }
     }
     pub fn log_debug(&self, message: String) {
-        if self.log_level <= LogLevel::DEBUG {
+        if self.log_level <= LogLevel::Debug {
             eprintln!("{} {}", PREFIX_DEBUG.as_str(), message);
         }
     }
     pub fn log_info(&self, message: String) {
-        if self.log_level <= LogLevel::INFO {
+        if self.log_level <= LogLevel::Info {
             eprintln!("{} {}", PREFIX_INFO.as_str(), message);
         }
     }

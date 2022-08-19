@@ -14,7 +14,7 @@ pub struct NodeProject<'a> {
 }
 
 impl NodeProject<'_> {
-    pub fn new<'a>(project_file: PathBuf, logger: &'a Logger) -> NodeProject {
+    pub fn new(project_file: PathBuf, logger: &Logger) -> NodeProject {
         NodeProject {
             project_file,
             found_line: usize::MAX,
@@ -38,11 +38,11 @@ impl Project for NodeProject<'_> {
         self.logger
     }
 
-    fn set_found_line(&mut self, line: usize) -> () {
+    fn set_found_line(&mut self, line: usize) {
         self.found_line = line;
     }
 
-    fn set_version_string(&mut self, version_string: String) -> () {
+    fn set_version_string(&mut self, version_string: String) {
         self.version_string = version_string;
     }
 
@@ -51,7 +51,7 @@ impl Project for NodeProject<'_> {
     }
 
     fn build_project_line(&self, next_version: &SemanticVersion) -> String {
-        format!("  \"version\": \"{}\",", next_version.to_string())
+        format!("  \"version\": \"{}\",", next_version)
     }
 
     fn get_project_type(&self) -> ProjectType {

@@ -8,7 +8,6 @@ use projectparse::new_project;
 
 use crate::cli::CliContext;
 use crate::git::{calc_bumplevel, GitContext};
-use crate::projectparse::Project;
 use crate::projectparse::ProjectType;
 use crate::semver::SemanticVersion;
 
@@ -37,7 +36,7 @@ fn main() {
 
     let relevant_commits = git_context.get_commits_since_tag(latest);
 
-    if relevant_commits.len() != 0 {
+    if !relevant_commits.is_empty() {
         logger.log_debug("Found the following relevant commits:".to_string());
         relevant_commits
             .iter()
@@ -67,19 +66,16 @@ fn main() {
 
             if cli_context.dryrun {
                 logger.log_info("Dry run activated, not proceeding any further".to_string());
+            } else if bumplevel == BumpLevel::None {
+                logger.log_info(
+                    "No relevant tags found that have a matching format; nothing to do here"
+                        .to_string(),
+                );
             } else {
-                if bumplevel == BumpLevel::None {
-                    logger.log_info(
-                        "No relevant tags found that have a matching format; nothing to do here"
-                            .to_string(),
-                    );
-                } else {
-                    project.update_project_version_file(&version);
+                project.update_project_version_file(&version);
 
-                    let commit_id =
-                        git_context.commit_release(&version, project.get_project_file());
-                    git_context.tag_release(cli_context.tag_prefix.as_str(), &version, &commit_id);
-                }
+                let commit_id = git_context.commit_release(&version, project.get_project_file());
+                git_context.tag_release(cli_context.tag_prefix.as_str(), &version, &commit_id);
             }
         } else {
             panic!("Failed to find a version string");

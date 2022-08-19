@@ -37,7 +37,7 @@ pub trait Project {
                 Some(cap) => {
                     // 0 is the whole line, 1 is the capture group we care about
                     let cap = &cap[1];
-                    logger.log_debug(format!("Matched '{}' at line {}", cap.to_string(), index));
+                    logger.log_debug(format!("Matched '{}' at line {}", cap, index));
 
                     self.set_found_line(index);
                     self.set_version_string(cap.to_owned());
@@ -97,10 +97,10 @@ pub trait Project {
     fn read_project_version(&mut self) -> bool;
     fn get_project_file(&self) -> &PathBuf;
     fn get_logger(&self) -> &Logger;
-    fn set_found_line(&mut self, line: usize) -> ();
+    fn set_found_line(&mut self, line: usize);
     fn get_found_line(&self) -> usize;
     fn get_version_string(&self) -> &str;
-    fn set_version_string(&mut self, version_string: String) -> ();
+    fn set_version_string(&mut self, version_string: String);
     fn build_project_line(&self, next_version: &SemanticVersion) -> String;
     fn get_project_type(&self) -> ProjectType;
 }
@@ -108,7 +108,7 @@ pub trait Project {
 pub fn new_project<'a>(path: &'a str, logger: &'a Logger) -> Box<dyn Project + 'a> {
     let path = Path::new(path);
     let entries = fs::read_dir(path)
-        .expect(format!("Failed to read project dir {}", path.to_str().unwrap()).as_str());
+        .unwrap_or_else(|_| panic!("Failed to read project dir {}", path.to_str().unwrap()));
 
     let mut project_type = ProjectType::Unknown;
     let mut project_file = PathBuf::new();

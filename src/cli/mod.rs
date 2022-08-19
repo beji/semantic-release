@@ -1,4 +1,4 @@
-use clap::{arg, command, Command};
+use clap::{arg, command};
 
 use self::logger::LogLevel;
 
@@ -28,26 +28,23 @@ impl CliContext {
             .get_matches();
 
         let log_level = match matches.occurrences_of("verbose") {
-            0 => LogLevel::INFO,
-            _ => LogLevel::DEBUG,
+            0 => LogLevel::Info,
+            _ => LogLevel::Debug,
         };
 
-        let dryrun = match matches.occurrences_of("dry") {
-            0 => false,
-            _ => true,
-        };
+        let dryrun = !matches!(matches.occurrences_of("dry"), 0);
 
         let patchtokens: Vec<String> = matches
             .value_of("patchtokens")
             .unwrap()
-            .split(",")
+            .split(',')
             .map(|s| s.to_owned())
             .collect();
 
         let minortokens: Vec<String> = matches
             .value_of("minortokens")
             .unwrap()
-            .split(",")
+            .split(',')
             .map(|s| s.to_owned())
             .collect();
 

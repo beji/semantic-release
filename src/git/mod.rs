@@ -4,7 +4,7 @@ use std::{
 };
 
 use console::style;
-use git2::{DiffFormat, DiffOptions, ObjectType, Oid, Repository, Signature};
+use git2::{DiffFormat, DiffOptions, ObjectType, Oid, Repository};
 
 use crate::{cli::logger::Logger, semver::SemanticVersion};
 
@@ -27,10 +27,12 @@ impl GitContext<'_> {
         let path = Path::new(path);
         // let path = canonicalize(&path).expect("Failed to canonicalize input path");
 
-        let repo = Repository::discover(&path).expect(&format!(
-            "Failed to open a git repo at {}, is this a git repo?",
-            path.display()
-        ));
+        let repo = Repository::discover(&path).unwrap_or_else(|_| {
+            panic!(
+                "Failed to open a git repo at {}, is this a git repo?",
+                path.display()
+            )
+        });
 
         logger.log_info(format!(
             "Found a git repository at {}",
@@ -94,24 +96,24 @@ impl GitContext<'_> {
                 let commit = self
                     .repo
                     .find_commit(id)
-                    .expect(format!("Failed to find commit from id {}", id).as_str());
+                    .unwrap_or_else(|_| panic!("Failed to find commit from id {}", id));
                 let tree = commit
                     .tree()
-                    .expect(format!("Failed to get tree from id {}", id).as_str());
+                    .unwrap_or_else(|_| panic!("Failed to get tree from id {}", id));
                 let parent = commit
                     .parent(0)
-                    .expect(format!("Failed to find parent to commit {}", id).as_str())
+                    .unwrap_or_else(|_| panic!("Failed to find parent to commit {}", id))
                     .tree()
                     .expect("Failed to get tree from parent");
                 // TODO: Maybe diffing with index would be better, no idea
                 let diff = self
                     .repo
                     .diff_tree_to_tree(Some(&parent), Some(&tree), Some(&mut DiffOptions::new()))
-                    .expect(format!("Failed to build diff for commit {}", id).as_str());
+                    .unwrap_or_else(|_| panic!("Failed to build diff for commit {}", id));
 
                 let summary = commit
                     .summary()
-                    .expect(format!("Failed to extract summary for commit {}", id).as_str());
+                    .unwrap_or_else(|| panic!("Failed to extract summary for commit {}", id));
 
                 let mut is_relevant = false;
 
@@ -130,14 +132,10 @@ impl GitContext<'_> {
                     None => is_relevant = true,
                 }
 
-                let body = match commit.body() {
-                    Some(body) => Some(body.to_owned()),
-                    None => None,
-                };
+                let body = commit.body().map(|body| body.to_owned());
 
                 if is_relevant {
                     Some(GitCommit {
-                        id,
                         summary: summary.to_owned(),
                         body,
                     })
@@ -156,7 +154,7 @@ impl GitContext<'_> {
             .expect("Failed to get signature from repo");
         let mut index = self.repo.index().expect("Failed to get repo index");
         let project_file = Path::new(project_file);
-        let project_file = path_relative_to_repo(&self.repo, &project_file)
+        let project_file = path_relative_to_repo(&self.repo, project_file)
             .expect("Failed to build a relative path for the project file");
 
         // FIXME: This also needs to add Cargo.lock if a Cargo.toml was changed
@@ -213,15 +211,14 @@ pub struct GitTag {
 
 #[derive(Debug)]
 pub struct GitCommit {
-    id: Oid,
     pub summary: String,
     body: Option<String>,
 }
 
 impl GitCommit {
+    #[allow(dead_code)]
     pub fn for_test(summary: String, body: Option<String>) -> GitCommit {
-        let id = Oid::from_str("1").unwrap();
-        GitCommit { id, summary, body }
+        GitCommit { summary, body }
     }
 
     pub fn to_bumplevel(
@@ -237,10 +234,10 @@ impl GitCommit {
                 if body.contains("BREAKING CHANGE:") {
                     BumpLevel::Major
                 } else {
-                    summary_to_bumplevel(&summary, patch_tokens, minor_tokens)
+                    summary_to_bumplevel(summary, patch_tokens, minor_tokens)
                 }
             }
-            None => summary_to_bumplevel(&summary, patch_tokens, minor_tokens),
+            None => summary_to_bumplevel(summary, patch_tokens, minor_tokens),
         }
     }
 }
@@ -268,7 +265,7 @@ fn summary_to_bumplevel(
 }
 
 pub fn calc_bumplevel(
-    commits: &Vec<GitCommit>,
+    commits: &[GitCommit],
     patch_tokens: &Vec<String>,
     minor_tokens: &Vec<String>,
 ) -> BumpLevel {
@@ -277,7 +274,7 @@ pub fn calc_bumplevel(
         .map(|commit| commit.to_bumplevel(patch_tokens, minor_tokens))
         .collect();
     bumplevels.sort();
-    bumplevels.last().expect("Failed to get last element from bumplevels list; Most likely calc_bumplevel was called on an empty list").clone()
+    *bumplevels.last().expect("Failed to get last element from bumplevels list; Most likely calc_bumplevel was called on an empty list")
 }
 
 pub fn path_relative_to_repo(repo: &Repository, path: &Path) -> Option<String> {

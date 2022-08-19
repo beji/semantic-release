@@ -17,7 +17,7 @@ impl fmt::Display for SemanticVersion {
 impl SemanticVersion {
     pub fn new(version_str: &str, logger: &Logger) -> Result<SemanticVersion, &'static str> {
         logger.log_debug(format!("Trying to parse: {}", version_str));
-        let split = version_str.split(".");
+        let split = version_str.split('.');
         if split.clone().count() < 3 {
             return Err(
                 "Failed to split the given string into exactly three parts. Found too few parts",
@@ -77,7 +77,7 @@ mod tests {
 
     #[test]
     fn new() {
-        let logger = Logger::new(LogLevel::INFO);
+        let logger = Logger::new(LogLevel::Info);
         let a = SemanticVersion::new("1.2.3", &logger);
         let a_sv = a.as_ref().unwrap();
         assert!(a.is_ok());
@@ -88,7 +88,7 @@ mod tests {
 
     #[test]
     fn bump_major() {
-        let logger = Logger::new(LogLevel::INFO);
+        let logger = Logger::new(LogLevel::Info);
         let mut a = SemanticVersion::new("1.2.3", &logger).unwrap();
         a.bump(BumpLevel::Major);
         assert_eq!(a.to_string(), "2.2.3");
@@ -96,7 +96,7 @@ mod tests {
 
     #[test]
     fn bump_minor() {
-        let logger = Logger::new(LogLevel::INFO);
+        let logger = Logger::new(LogLevel::Info);
         let mut a = SemanticVersion::new("1.2.3", &logger).unwrap();
         a.bump(BumpLevel::Minor);
         assert_eq!(a.to_string(), "1.3.3");
@@ -104,7 +104,7 @@ mod tests {
 
     #[test]
     fn bump_patch() {
-        let logger = Logger::new(LogLevel::INFO);
+        let logger = Logger::new(LogLevel::Info);
         let mut a = SemanticVersion::new("1.2.3", &logger).unwrap();
         a.bump(BumpLevel::Patch);
         assert_eq!(a.to_string(), "1.2.4");
@@ -112,7 +112,7 @@ mod tests {
 
     #[test]
     fn bump_none() {
-        let logger = Logger::new(LogLevel::INFO);
+        let logger = Logger::new(LogLevel::Info);
         let mut a = SemanticVersion::new("1.2.3", &logger).unwrap();
         a.bump(BumpLevel::None);
         assert_eq!(a.to_string(), "1.2.3");
