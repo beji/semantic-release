@@ -63,7 +63,7 @@ impl SemanticVersion {
 
 #[cfg(test)]
 mod tests {
-    use crate::semver::*;
+    use crate::{cli::logger::LogLevel, semver::*};
 
     #[test]
     fn to_string() {
@@ -77,38 +77,43 @@ mod tests {
 
     #[test]
     fn new() {
-        let a = SemanticVersion::new("1.2.3");
+        let logger = Logger::new(LogLevel::INFO);
+        let a = SemanticVersion::new("1.2.3", &logger);
         let a_sv = a.as_ref().unwrap();
         assert!(a.is_ok());
         assert_eq!(a_sv.to_string(), "1.2.3");
-        let b = SemanticVersion::new("0.0.0").unwrap();
+        let b = SemanticVersion::new("0.0.0", &logger).unwrap();
         assert_eq!(b.to_string(), "0.0.0");
     }
 
     #[test]
     fn bump_major() {
-        let mut a = SemanticVersion::new("1.2.3").unwrap();
+        let logger = Logger::new(LogLevel::INFO);
+        let mut a = SemanticVersion::new("1.2.3", &logger).unwrap();
         a.bump(BumpLevel::Major);
         assert_eq!(a.to_string(), "2.2.3");
     }
 
     #[test]
     fn bump_minor() {
-        let mut a = SemanticVersion::new("1.2.3").unwrap();
+        let logger = Logger::new(LogLevel::INFO);
+        let mut a = SemanticVersion::new("1.2.3", &logger).unwrap();
         a.bump(BumpLevel::Minor);
         assert_eq!(a.to_string(), "1.3.3");
     }
 
     #[test]
     fn bump_patch() {
-        let mut a = SemanticVersion::new("1.2.3").unwrap();
+        let logger = Logger::new(LogLevel::INFO);
+        let mut a = SemanticVersion::new("1.2.3", &logger).unwrap();
         a.bump(BumpLevel::Patch);
         assert_eq!(a.to_string(), "1.2.4");
     }
 
     #[test]
     fn bump_none() {
-        let mut a = SemanticVersion::new("1.2.3").unwrap();
+        let logger = Logger::new(LogLevel::INFO);
+        let mut a = SemanticVersion::new("1.2.3", &logger).unwrap();
         a.bump(BumpLevel::None);
         assert_eq!(a.to_string(), "1.2.3");
     }
