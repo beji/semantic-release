@@ -43,7 +43,11 @@ fn main() {
             .iter()
             .for_each(|commit| logger.log_debug(format!("commit: {:?}", commit)));
 
-        let bumplevel = calc_bumplevel(&relevant_commits);
+        let bumplevel = calc_bumplevel(
+            &relevant_commits,
+            &cli_context.patchtokens,
+            &cli_context.minortokens,
+        );
 
         let mut project = new_project(&cli_context.path, &logger);
 

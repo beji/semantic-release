@@ -224,7 +224,11 @@ impl GitCommit {
         GitCommit { id, summary, body }
     }
 
-    pub fn to_bumplevel(&self) -> BumpLevel {
+    pub fn to_bumplevel(
+        &self,
+        patch_tokens: &Vec<String>,
+        minor_tokens: &Vec<String>,
+    ) -> BumpLevel {
         let summary = &self.summary;
         let body = &self.body;
 
@@ -233,27 +237,45 @@ impl GitCommit {
                 if body.contains("BREAKING CHANGE:") {
                     BumpLevel::Major
                 } else {
-                    summary_to_bumplevel(&summary)
+                    summary_to_bumplevel(&summary, patch_tokens, minor_tokens)
                 }
             }
-            None => summary_to_bumplevel(&summary),
+            None => summary_to_bumplevel(&summary, patch_tokens, minor_tokens),
         }
     }
 }
 
-fn summary_to_bumplevel(summary: &str) -> BumpLevel {
-    if summary.starts_with("fix") {
-        BumpLevel::Patch
-    } else if summary.starts_with("feat") {
-        BumpLevel::Minor
-    } else {
-        BumpLevel::None
+fn summary_to_bumplevel(
+    summary: &str,
+    patch_tokens: &Vec<String>,
+    minor_tokens: &Vec<String>,
+) -> BumpLevel {
+    let mut bump_level = BumpLevel::None;
+
+    for token in patch_tokens {
+        if summary.starts_with(token) {
+            bump_level = BumpLevel::Patch;
+        }
     }
+    if bump_level == BumpLevel::None {
+        for token in minor_tokens {
+            if summary.starts_with(token) {
+                bump_level = BumpLevel::Minor;
+            }
+        }
+    }
+    bump_level
 }
 
-pub fn calc_bumplevel(commits: &Vec<GitCommit>) -> BumpLevel {
-    let mut bumplevels: Vec<BumpLevel> =
-        commits.iter().map(|commit| commit.to_bumplevel()).collect();
+pub fn calc_bumplevel(
+    commits: &Vec<GitCommit>,
+    patch_tokens: &Vec<String>,
+    minor_tokens: &Vec<String>,
+) -> BumpLevel {
+    let mut bumplevels: Vec<BumpLevel> = commits
+        .iter()
+        .map(|commit| commit.to_bumplevel(patch_tokens, minor_tokens))
+        .collect();
     bumplevels.sort();
     bumplevels.last().expect("Failed to get last element from bumplevels list; Most likely calc_bumplevel was called on an empty list").clone()
 }
@@ -299,7 +321,10 @@ mod tests {
             GitCommit::for_test("fix".to_string(), None),
         ];
 
-        let result = calc_bumplevel(&input);
+        let patch_tokens: Vec<String> = vec!["fix".to_owned()];
+        let minor_tokens: Vec<String> = vec!["feat".to_owned()];
+
+        let result = calc_bumplevel(&input, &patch_tokens, &minor_tokens);
         assert_eq!(result, BumpLevel::Minor);
     }
 
@@ -311,7 +336,10 @@ mod tests {
             GitCommit::for_test("fix".to_string(), None),
         ];
 
-        let result = calc_bumplevel(&input);
+        let patch_tokens: Vec<String> = vec!["fix".to_owned()];
+        let minor_tokens: Vec<String> = vec!["feat".to_owned()];
+
+        let result = calc_bumplevel(&input, &patch_tokens, &minor_tokens);
         assert_eq!(result, BumpLevel::Major);
     }
 }
