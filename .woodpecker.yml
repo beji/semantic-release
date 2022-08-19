@@ -1,0 +1,6 @@
+pipeline:
+  build:
+    image: rust:1.62
+    commands:
+      - cargo test
+      - cargo build
