@@ -3,7 +3,11 @@ imports = ["language.rust"]
 
 [devshell]
 packages = [
-         "rust-analyzer"
+         "rust-analyzer",
+         "gcc",
+         "openssl_3.dev",
+         "openssl_3",
+         "pkg-config"
 ]
 
 [[commands]]
