@@ -1,6 +1,5 @@
 pipeline:
   build:
-    image: rust:1.65
+    image: 172.17.0.1:8882/nix-builder
     commands:
-      - cargo test
-      - cargo build
+      - nix build
