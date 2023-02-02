@@ -1,6 +1,7 @@
 use std::fmt;
 
-use tracing::debug;
+use console::style;
+use tracing::{debug, info, trace};
 
 use crate::git::BumpLevel;
 
@@ -48,18 +49,25 @@ impl SemanticVersion {
     }
 
     pub fn bump(&mut self, bumplevel: BumpLevel) {
+        debug!("bumping version: {}", self);
         match bumplevel {
             BumpLevel::Patch => {
+                trace!("Patch level bump");
                 self.patch += 1;
             }
             BumpLevel::Minor => {
+                trace!("Minor level bump");
                 self.minor += 1;
             }
             BumpLevel::Major => {
+                trace!("Major level bump");
                 self.major += 1;
             }
-            BumpLevel::None => (),
+            BumpLevel::None => {
+                trace!("No bump happening");
+            }
         };
+        info!("Next version: {}", style(self).bold());
     }
 }
 

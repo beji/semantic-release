@@ -5,9 +5,7 @@ use std::{
     fs::canonicalize,
     path::{Path, PathBuf},
 };
-use tracing::info;
-
-use crate::semver::SemanticVersion;
+use tracing::{debug, info, trace};
 
 #[derive(Debug, PartialEq, PartialOrd, Eq, Ord, Clone, Copy)]
 pub enum BumpLevel {
@@ -142,29 +140,46 @@ impl GitContext {
             .collect()
     }
 
-    pub fn commit_release(&self, version: &SemanticVersion, project_file: &PathBuf) -> Oid {
-        let version = version.to_string();
+    pub fn add_to_release(&self, project_file: &PathBuf) -> anyhow::Result<()> {
+        debug!("Adding {} to the git commit", project_file.display());
+        let project_file = Path::new(&project_file);
+        let project_file = path_relative_to_repo(&self.repo, project_file)
+            .context("Failed to build a relative path for the project file")?;
+
+        let mut index = self.repo.index().context("Failed to get index from repo")?;
+
+        index
+            .add_path(Path::new(&project_file))
+            .context("Failed to add path to index")?;
+
+        index
+            .write()
+            .context("Failed to write the git commit index")?;
+        Ok(())
+    }
+
+    pub fn finish_release(&self, version: &str) -> anyhow::Result<Oid> {
         let sig = self
             .repo
             .signature()
-            .expect("Failed to get signature from repo");
-        let mut index = self.repo.index().expect("Failed to get repo index");
-        let project_file = Path::new(project_file);
-        let project_file = path_relative_to_repo(&self.repo, project_file)
-            .expect("Failed to build a relative path for the project file");
+            .context("Failed to get signature from repo")?;
 
-        // FIXME: This also needs to add Cargo.lock if a Cargo.toml was changed
-        index
-            .add_path(Path::new(&project_file))
-            .expect("Failed to add path to index");
-        index.write().expect("Failed to write index");
-        let tree_oid = index.write_tree().expect("Failed to write git tree");
+        let mut index = self.repo.index().context("Failed to get index from repo")?;
+        let tree_oid = index
+            .write_tree()
+            .context("Failed to write git index tree")?;
+        trace!("Tree oid: {}", tree_oid);
         let tree = self
             .repo
             .find_tree(tree_oid)
-            .expect("Failed to get tree by oid");
+            .with_context(|| format!("Failed to get git tree by oid {}", tree_oid))?;
 
-        let parent_commit = self.repo.head().unwrap().peel_to_commit().unwrap();
+        let parent_commit = self
+            .repo
+            .head()
+            .unwrap()
+            .peel_to_commit()
+            .context("Failed to get parent commit (current HEAD)")?;
 
         let result_id = self
             .repo
@@ -172,29 +187,31 @@ impl GitContext {
                 Some("HEAD"),
                 &sig,
                 &sig,
-                format!("[Semantic release]: Release {}", version.as_str()).as_str(),
+                format!("[Semantic release]: Release {}", version).as_str(),
                 &tree,
                 &[&parent_commit],
             )
-            .expect("Failed to commit changes");
+            .context("Failed to commit changes")?;
 
-        tracing::debug!("Created git commit {}", result_id);
+        debug!("Created git commit {}", result_id);
 
-        result_id
+        Ok(result_id)
     }
 
-    pub fn tag_release(&self, tag_prefix: &str, version: &SemanticVersion, oid: &Oid) {
-        let version = version.to_string();
+    pub fn tag_release(&self, tag_prefix: &str, version: &str, oid: Oid) -> anyhow::Result<()> {
         let object = self
             .repo
-            .find_object(*oid, Some(ObjectType::Commit))
-            .expect("Failed to find git object by oid");
-        let tag_name = format!("{}{}", tag_prefix, version.as_str());
-        self.repo
+            .find_object(oid, Some(ObjectType::Commit))
+            .context("Failed to find git object by oid")?;
+        let tag_name = format!("{}{}", tag_prefix, version);
+        let _ = self
+            .repo
             .tag_lightweight(tag_name.as_str(), &object, false)
-            .expect("Failed to tag release");
+            .context("Failed to tag release")?;
 
         info!("Created tag {}", tag_name);
+
+        Ok(())
     }
 }
 
