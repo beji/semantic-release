@@ -5,8 +5,9 @@ use std::{
 
 use console::style;
 use git2::{DiffFormat, DiffOptions, ObjectType, Oid, Repository};
+use tracing::info;
 
-use crate::{cli::logger::Logger, semver::SemanticVersion};
+use crate::semver::SemanticVersion;
 
 #[derive(Debug, PartialEq, PartialOrd, Eq, Ord, Clone, Copy)]
 pub enum BumpLevel {
@@ -16,14 +17,13 @@ pub enum BumpLevel {
     Major,
 }
 
-pub struct GitContext<'a> {
+pub struct GitContext {
     repo: Repository,
     sub_path: Option<String>,
-    logger: &'a Logger,
 }
 
-impl GitContext<'_> {
-    pub fn new<'a>(path: &str, logger: &'a Logger) -> GitContext<'a> {
+impl GitContext {
+    pub fn new(path: &str) -> GitContext {
         let path = Path::new(path);
         // let path = canonicalize(&path).expect("Failed to canonicalize input path");
 
@@ -34,26 +34,22 @@ impl GitContext<'_> {
             )
         });
 
-        logger.log_info(format!(
+        info!(
             "Found a git repository at {}",
             style(repo.path().display()).bold()
-        ));
+        );
 
         let sub_path = path_relative_to_repo(&repo, path);
 
         match &sub_path {
-            Some(sub_path) => logger.log_info(format!(
+            Some(sub_path) => info!(
                 "Working with the relative repository path {}",
                 style(&sub_path).bold()
-            )),
-            None => logger.log_info("Working from the repository root".to_string()),
+            ),
+            None => info!("Working from the repository root"),
         }
 
-        GitContext {
-            repo,
-            sub_path,
-            logger,
-        }
+        GitContext { repo, sub_path }
     }
 
     pub fn get_latest_tag(&self, prefix: &str) -> Option<GitTag> {
@@ -182,8 +178,7 @@ impl GitContext<'_> {
             )
             .expect("Failed to commit changes");
 
-        self.logger
-            .log_debug(format!("Created git commit {}", result_id));
+        tracing::debug!("Created git commit {}", result_id);
 
         result_id
     }
@@ -199,7 +194,7 @@ impl GitContext<'_> {
             .tag_lightweight(tag_name.as_str(), &object, false)
             .expect("Failed to tag release");
 
-        self.logger.log_info(format!("Created tag {}", tag_name));
+        info!("Created tag {}", tag_name);
     }
 }
 
