@@ -27,7 +27,8 @@ fn main() -> anyhow::Result<()> {
         style(&cli_context.path).bold()
     );
 
-    let git_context = GitContext::new(cli_context.path.as_str());
+    let git_context =
+        GitContext::new(cli_context.path.as_str()).context("Failed to build a git context")?;
 
     let latest = git_context
         .get_latest_tag(cli_context.tag_prefix.as_str())

@@ -1,10 +1,10 @@
+use anyhow::Context;
+use console::style;
+use git2::{DiffFormat, DiffOptions, ObjectType, Oid, Repository};
 use std::{
     fs::canonicalize,
     path::{Path, PathBuf},
 };
-
-use console::style;
-use git2::{DiffFormat, DiffOptions, ObjectType, Oid, Repository};
 use tracing::info;
 
 use crate::semver::SemanticVersion;
@@ -23,16 +23,16 @@ pub struct GitContext {
 }
 
 impl GitContext {
-    pub fn new(path: &str) -> GitContext {
+    pub fn new(path: &str) -> anyhow::Result<GitContext> {
         let path = Path::new(path);
         // let path = canonicalize(&path).expect("Failed to canonicalize input path");
 
-        let repo = Repository::discover(&path).unwrap_or_else(|_| {
-            panic!(
+        let repo = Repository::discover(&path).with_context(|| {
+            format!(
                 "Failed to open a git repo at {}, is this a git repo?",
                 path.display()
             )
-        });
+        })?;
 
         info!(
             "Found a git repository at {}",
@@ -49,7 +49,7 @@ impl GitContext {
             None => info!("Working from the repository root"),
         }
 
-        GitContext { repo, sub_path }
+        Ok(GitContext { repo, sub_path })
     }
 
     pub fn get_latest_tag(&self, prefix: &str) -> Option<GitTag> {
