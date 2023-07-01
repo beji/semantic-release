@@ -1,22 +1,36 @@
-use anyhow::{bail, Context};
-use console::style;
-use git::BumpLevel;
-use tracing::{debug, info, trace, warn};
+use std::fs;
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output};
 
-use crate::cli::CliContext;
-use crate::git::{calc_bumplevel, GitContext};
-use crate::project::{
-    find_project_files, read_project_version, update_project_version_file, ProjectFile,
-};
-use crate::semver::SemanticVersion;
+use color_eyre::eyre::{self, WrapErr};
+use console::style;
+use tempfile::NamedTempFile;
+use tracing::{debug, info, span, warn, Level};
+
+use crate::project::load_versionfile;
+use crate::{cli::CliContext, git::calc_bumplevel, semver::SemanticVersion};
 
 mod cli;
+mod config;
 mod git;
 mod project;
 mod semver;
 
-fn main() -> anyhow::Result<()> {
-    debug!("No idea bro");
+fn run_command(executable: &str, cwd: &PathBuf, args: Vec<String>) -> eyre::Result<Output> {
+    let mut command = Command::new(executable);
+    command.args(args).current_dir(cwd);
+    let program = command.get_program().to_str().unwrap();
+    let args = command.get_args();
+    debug!("Executing {:?} {:?}", program, args);
+    let output = command
+        .output()
+        .context("Failed to get output from command")?;
+    Ok(output)
+}
+
+fn main() -> eyre::Result<()> {
+    color_eyre::install()?;
     let cli_context = CliContext::new().expect("Failed to build CLI Context");
 
     tracing_subscriber::fmt::fmt()
@@ -25,122 +39,154 @@ fn main() -> anyhow::Result<()> {
         .with_target(false)
         .init();
 
-    info!(
-        "Looking for a git repo at (or above) {}",
-        style(&cli_context.path).bold()
-    );
+    let config =
+        config::Config::from_path(&cli_context.path).context("Failed to build configuration")?;
 
-    let git_context =
-        GitContext::new(cli_context.path.as_str()).context("Failed to build a git context")?;
+    let path = Path::new(&cli_context.path);
+    let path = path.parent().unwrap();
+    let path = fs::canonicalize(path)?;
+    let subpath = path.join(&config.subpath);
 
-    let latest = git_context
-        .get_latest_tag(cli_context.tag_prefix.as_str())
-        .unwrap();
-    info!(
-        "Found tag {}, will use that as base",
-        style(&latest.name).bold()
-    );
+    let mut semver = SemanticVersion::new();
+    let mut has_commits = false;
 
-    let relevant_commits = git_context.get_commits_since_tag(latest);
+    config.files.iter().try_for_each(|file| -> eyre::Result<()> {
+        let span = span!(Level::TRACE, "file", file = &file.path);
+        let _guard = span.enter();
+        let filename = &file.path;
+        info!("Handling file {}", style(&filename).bold());
+        let filepath = subpath.join(filename);
+        let project_type = &file.project_type;
 
-    if !relevant_commits.is_empty() {
-        debug!("Found the following relevant commits:");
-        relevant_commits
-            .iter()
-            .for_each(|commit| trace!("commit: {:?}", commit));
+        debug!("Path: {}", &filepath.display());
+        let mut version_file = load_versionfile(&filepath, file).context("Failed to build internal representation of project file")?;
 
-        let bumplevel = calc_bumplevel(
-            &relevant_commits,
-            &cli_context.patchtokens,
-            &cli_context.minortokens,
-        );
+        let version = version_file.read_version()
+            .context("Failed to read version from project file")?;
 
-        if bumplevel == BumpLevel::None {
-            info!("No relevant tags found that have a matching format; nothing to do here");
+        info!("Fetching tags");
+        let args = vec![
+            "tag".to_owned(),
+            "--list".to_owned(),
+            format!("{}{}", &config.tagprefix, &version),
+            "--sort=-creatordate".to_owned(),
+        ];
+        let tags = run_command("git", &subpath, args).context("Failed to get git tags")?;
+
+        let tags: Vec<&str> = std::str::from_utf8(&tags.stdout)?
+            .split('\n')
+            .filter(|line| !line.is_empty())
+            .collect();
+        if tags.is_empty() {
+            warn!("Could not find a tag matching {}", &config.tagprefix);
+            warn!("Stopping execution");
         } else {
-            debug!("Scanning for relevant files");
-            let relevant_files = find_project_files(&cli_context.path)
-                .context("Failed to get any relevant files from filesystem")?;
+            debug!("matching tags: {:?}", tags);
+            let last_tag = *tags.first().unwrap();
+            info!(
+                "Found {} as the latest relevant tag",
+                style(last_tag).bold()
+            );
 
-            if relevant_files.is_empty() {
-                warn!("Could not find any supported project file types");
-                bail!("Could not find any supported project file types");
-            } else {
-                trace!("Found project files");
-                if relevant_files.len() > 1 {
-                    info!("Found multiple project files");
-                    info!("Will try to update them all to the same version");
-                }
+            info!("Fetching relevant commits");
+            let args = vec![
+                "rev-list".to_owned(),
+                format!("{}..HEAD", last_tag),
+                "--format=%B".to_owned(),
+                ".".to_owned(),
+            ];
+            let commits = run_command("git", &subpath, args).context("Failed to get git commits")?;
+            let commits: Vec<&str> = std::str::from_utf8(&commits.stdout)?
+                .split('\n')
+                .filter(|line| !line.is_empty())
+                .collect();
+            debug!("Found {:?} as relevant commits", commits);
 
-                let files_with_versions: Vec<(SemanticVersion, usize, ProjectFile)> =
-                    relevant_files
-                        .iter()
-                        .filter_map(|file| {
-                            let filename = &file.filename;
-                            info!("Handling file {}", filename.display());
-                            let version = read_project_version(file.to_owned())
-                                .with_context(|| {
-                                    format!(
-                                        "Failed to extract a version from the project file {}",
-                                        filename.display()
-                                    )
-                                })
-                                .ok()?;
-                            match version {
-                                Some(version) => {
-                                    let mut next_version = SemanticVersion::new(&version.version)
-                                        .unwrap_or_else(|_| {
-                                            panic!(
-                                                "Failed to parse a valid semantic version from {}",
-                                                version.version
-                                            )
-                                        });
-                                    next_version.bump(bumplevel);
-                                    Some((next_version, version.line, file.to_owned()))
-                                }
-                                None => {
-                                    debug!(
-                                        "Could not find a version in {}, dropping it",
-                                        filename.display()
-                                    );
-                                    None
-                                }
-                            }
-                        })
-                        .collect();
-
-                if cli_context.dryrun {
-                    info!("Dry run activated, not proceeding any further");
-                } else {
-                    info!("Starting file updates now");
-                    // Just use the first one we find...
-                    let (version_for_release, _, _) = files_with_versions
-                        .get(0)
-                        .context("Failed to get the first version")?;
-                    let version_for_release = version_for_release.clone().to_string();
-                    for (version, line, file) in files_with_versions {
-                        let filename = &file.filename;
-                        let _ = update_project_version_file(&file, version, line)
-                            .context("Failed to update a project version file");
-
-                        git_context.add_to_release(filename).with_context(|| {
-                            format!(
-                                "Failed to add {} to the commit",
-                                style(filename.display()).bold()
-                            )
-                        })?;
-                    }
-                    let oid = git_context
-                        .finish_release(&version_for_release)
-                        .context("Failed to create a git commit")?;
-                    let _ = git_context
-                        .tag_release(&cli_context.tag_prefix, &version_for_release, oid)
-                        .context("Failed to tag the commit")?;
-                }
+            if commits.is_empty() {
+                info!("No relevant commits found. Not doing anything");
+                return Ok(());
             }
+
+            info!("Calculating Bumplevel");
+            let bumplevel = calc_bumplevel(&commits);
+            info!("Bumplevel: {:?}", style(&bumplevel).bold());
+
+            semver.set_version(&version)
+                .context("Failed to parse version into a semantic version")?;
+            semver.bump(bumplevel);
+
+            info!("Parsing {:?} with type {:?}", filepath, project_type);
+            let json =
+                version_file.update_project(&semver).context("Failed to update file JSON")?;
+            if cli_context.dryrun {
+                info!("Dry run is active, not writing the file");
+                debug!("Would write {}", json);
+            } else {
+                let mut file_handle = NamedTempFile::new().context("Failed to create temporary file")?;
+                file_handle.write_all(json.as_bytes()).context("Failed to write to temporary file, maybe the user is lacking the necessary permission")?;
+                let path = &file_handle.path().clone();
+                info!("Successfully updated the project file");
+                debug!("Moving temporay file {:?} to {:?}", &path, &filepath);
+                fs::copy(&path, &filepath).context("Failed to copy from temporary file to target")?;
+            }
+            info!(
+                "Adding {} to the git commit",
+                style(&filepath.display()).bold()
+            );
+            // TODO: There must be a better way than format!
+            let args = vec!["add".to_owned(), format!("{}", filename)];
+            if cli_context.dryrun {
+                info!("Dry run is active, not adding the file");
+                debug!(
+                    "Would run git with the arguments {:?} from the directory {:?}",
+                    args, &subpath
+                );
+            } else {
+                run_command("git", &subpath, args).context("Failed to execute git add")?;
+            }
+            has_commits = true;
         }
+
+        eyre::Result::Ok(())
+    })?;
+
+    if has_commits {
+        info!("Doing the git commit");
+        let args = vec![
+            "commit".to_string(),
+            "-m".to_string(),
+            format!("[Semantic release]: Release {}", &semver.to_string()),
+        ];
+        if cli_context.dryrun {
+            info!("Dry run is active, not commiting anything");
+            debug!(
+                "Would run git with the arguments {:?} from the directory {:?}",
+                args, &subpath
+            );
+        } else {
+            run_command("git", &subpath, args).context("Failed to execute git commit")?;
+        }
+
+        // TODO: Maybe make tagging optional?
+        let tag = format!("{}{}", &config.tagprefix, &semver.to_string());
+        info!("Tagging the release with tag {}", style(&tag).bold());
+        let args = vec!["tag".to_string(), tag];
+        if cli_context.dryrun {
+            info!("Dry run is active, not tagging anything");
+            debug!(
+                "Would run git with the arguments {:?} from the directory {:?}",
+                args, &subpath
+            );
+        } else {
+            run_command("git", &subpath, args).context("Failed to execute git tag")?;
+        }
+
+        info!(
+            "All done! keep in mind that this doesn't do a {}",
+            style("git push").bold()
+        );
     } else {
-        info!("Found no commits since the last tag");
+        info!("Nothing to change");
     }
     Ok(())
 }

@@ -1,203 +1,119 @@
-use anyhow::Context;
-use regex::Regex;
-use std::{
-    fs::{self, File},
-    io::{BufRead, BufReader, Write},
-    path::{Path, PathBuf},
+use std::{collections::HashMap, fs, path::PathBuf};
+
+use color_eyre::eyre::{self, WrapErr};
+use console::style;
+use serde_json::Value;
+use toml_edit::Document;
+use tracing::{debug, info, instrument, warn};
+
+use crate::{
+    config::{ProjectFile, ProjectType},
+    semver::SemanticVersion,
 };
-use tempfile::NamedTempFile;
-use tracing::{debug, trace};
 
-use crate::semver::SemanticVersion;
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum ProjectType {
-    Cargo,
-    NodeJs,
-    Maven,
-    DefaultNix,
+pub trait VersionFile {
+    fn new(filepath: &PathBuf, config: &ProjectFile) -> eyre::Result<Box<Self>>
+    where
+        Self: Sized;
+    fn read_version(&self) -> eyre::Result<String>;
+    fn update_project(&mut self, semver: &SemanticVersion) -> eyre::Result<String>;
 }
 
-#[derive(Debug, Clone)]
-pub struct ProjectFile {
-    pub project_type: ProjectType,
-    // TODO: This being a PathBuf prevents Copy from working... Not so nice
-    pub filename: PathBuf,
+pub fn load_versionfile(
+    filepath: &PathBuf,
+    config: &ProjectFile,
+) -> eyre::Result<Box<dyn VersionFile>> {
+    match config.project_type {
+        ProjectType::Json => Ok(Json::new(filepath, config)?),
+        ProjectType::Toml => Ok(Toml::new(filepath, config)?),
+    }
 }
 
 #[derive(Debug)]
-pub struct RegexResult {
-    pub line: usize,
-    pub version: String,
+pub struct Json {
+    json: HashMap<String, serde_json::Value>,
+    config: ProjectFile,
 }
 
-pub fn find_project_files(path: &str) -> anyhow::Result<Vec<ProjectFile>> {
-    let path = Path::new(path);
-    let entries = fs::read_dir(path)
-        .with_context(|| format!("Failed to read project dir {}", path.to_str().unwrap()))?;
-
-    let mut project_files: Vec<ProjectFile> = vec![];
-
-    for entry in entries {
-        let entry = entry.context("Failed to read directory entry")?;
-        let filename = entry.file_name().to_owned();
-        let filename = filename
-            .to_str()
-            .context("Failed to get the filename from a a directory entry")?;
-
-        if filename.ends_with("Cargo.toml") {
-            debug!("Found a cargo project file at {}", filename);
-            project_files.push(ProjectFile {
-                project_type: ProjectType::Cargo,
-                filename: entry.path(),
-            });
-        } else if filename.ends_with("package.json") {
-            debug!("Found a node project file at {}", filename);
-            project_files.push(ProjectFile {
-                project_type: ProjectType::NodeJs,
-                filename: entry.path(),
-            });
-        } else if filename.ends_with("pom.xml") {
-            debug!("Found a maven project file at {}", filename);
-            project_files.push(ProjectFile {
-                project_type: ProjectType::Maven,
-                filename: entry.path(),
-            });
-        } else if filename.ends_with("default.nix") {
-            debug!("Found a nix project file at {}", filename);
-            project_files.push(ProjectFile {
-                project_type: ProjectType::DefaultNix,
-                filename: entry.path(),
-            });
-        }
+impl VersionFile for Json {
+    #[instrument(level = "trace", name = "json::new")]
+    fn new(filepath: &PathBuf, config: &ProjectFile) -> eyre::Result<Box<Self>> {
+        let filecontent = fs::read_to_string(filepath).context("Failed to read project file")?;
+        let json: HashMap<String, serde_json::Value> = serde_json::from_str(&filecontent)?;
+        debug!("json: {:?}", json);
+        let config = config.clone();
+        Ok(Box::new(Json { json, config }))
     }
 
-    Ok(project_files)
-}
+    #[instrument(level = "trace", name = "json::read_version")]
+    fn read_version(&self) -> eyre::Result<String> {
+        let version = self.json[&self.config.key].as_str().unwrap();
+        let version = version.to_string();
+        Ok(version)
+    }
 
-pub fn read_project_version(project_file: ProjectFile) -> anyhow::Result<Option<RegexResult>> {
-    // NOTE: These unwraps should be fine, this is a static string...
-    match project_file.project_type {
-        ProjectType::Cargo | ProjectType::DefaultNix => {
-            let re = Regex::new(r"version\s*=\s*.([0-9]{1,}\.[0-9]{1,}\.[0-0{1,}]).*").unwrap();
-            read_project_version_regex(project_file, re)
-        }
-        ProjectType::NodeJs => {
-            let re =
-                Regex::new(r"\s*.version.\s*:\s*.([0-9]{1,}\.[0-9]{1,}\.[0-9]{1,}).*").unwrap();
-            read_project_version_regex(project_file, re)
-        }
-        ProjectType::Maven => {
-            let re = Regex::new(r"<version>([0-9]{1,}\.[0-9]{1,}\.[0-0{1,}])</version>").unwrap();
-            read_project_version_regex(project_file, re)
-        }
+    #[instrument(level = "trace", name = "json::update_project")]
+    fn update_project(&mut self, semver: &SemanticVersion) -> eyre::Result<String> {
+        info!("Updating JSON");
+        let key = format!("{}", self.config.key);
+        debug!(
+            "Trying to insert {} into key {}",
+            style(semver.to_string()).bold(),
+            style(&key).bold()
+        );
+        let _ = self
+            .json
+            .insert(key, Value::String(semver.to_string()))
+            .unwrap();
+        let json = serde_json::to_string_pretty(&self.json)
+            .context("Failed to turn the parsed object back into JSON")?;
+        debug!("new json: {}", json);
+        Ok(json)
     }
 }
 
-fn read_project_version_regex(
-    project_file: ProjectFile,
-    re: Regex,
-) -> anyhow::Result<Option<RegexResult>> {
-    let filename = project_file.filename;
-    trace!(
-        "Opening {} in search of a project version",
-        filename.display()
-    );
-    let file = File::open(&filename).with_context(|| {
-        format!(
-            "Failed to open file {}, maybe the user is lacking read permissions?",
-            filename.display()
-        )
-    })?;
-    let reader = BufReader::new(file);
-    trace!("Opened file");
-
-    // Now search for the first matching line
-    for (index, line) in reader.lines().enumerate() {
-        let line = line.with_context(|| format!("Failed to read a line from the file {}, maybe the user is lacking read permissions?", filename.display()))?;
-        match re.captures(&line) {
-            Some(cap) => {
-                // 0 is the whole line, 1 is the capture group we care about
-                let cap = &cap[1];
-                debug!("Found a matching substring '{}' at line {}", cap, index);
-
-                return Ok(Some(RegexResult {
-                    line: index,
-                    version: cap.to_owned(),
-                }));
-            }
-            None => (),
-        }
-    }
-
-    Ok(None)
+#[derive(Debug)]
+pub struct Toml {
+    toml: Document,
+    _config: ProjectFile,
 }
 
-pub fn update_project_version_file(
-    file: &ProjectFile,
-    version: SemanticVersion,
-    line_to_replace: usize,
-) -> anyhow::Result<()> {
-    let filename = &file.filename;
-    debug!("Starting to write {}", filename.display());
-    // Need to open as mut so permissions can be restored later on
-    let mut project_file = File::open(filename)
-        .with_context(|| format!("Failed to open project file {}", filename.display()))?;
-
-    let permissions = project_file
-        .metadata()
-        .expect("Failed to read project file metadata")
-        .permissions();
-    let reader = BufReader::new(&mut project_file);
-    let mut lines: Vec<String> = vec![];
-
-    for (index, line) in reader.lines().enumerate() {
-        if index == line_to_replace {
-            lines.push(build_version_line(&file, &version))
-        } else {
-            let line = line.context("Failed to read line")?;
-            lines.push(line);
-        }
+impl VersionFile for Toml {
+    #[instrument(level = "trace", name = "toml::new")]
+    fn new(filepath: &PathBuf, config: &ProjectFile) -> eyre::Result<Box<Self>>
+    where
+        Self: Sized,
+    {
+        let filecontent = fs::read_to_string(filepath).context("Failed to read project file")?;
+        let toml = filecontent
+            .parse::<Document>()
+            .context("Failed to parse toml file")?;
+        let config = config.clone();
+        debug!("toml: {:?}", toml);
+        warn!(
+            "the toml parser currently has the key {} hard coded, the configured value {} is ignored",
+            style("project.version").bold(),
+            style(&config.key).bold()
+        );
+        Ok(Box::new(Toml {
+            toml,
+            _config: config,
+        }))
     }
-    debug!("Creating temporary file to write to");
-    // Can't use the basic tempfile::tempfile() as that doesn't expose the file path
-    // We need that to use fs::copy, see below
-    let mut tmp = NamedTempFile::new().context("Failed to create a temporary file")?;
-    trace!("Created a temporary file at {}", &tmp.path().display());
-    let new_content = lines.join("\n");
 
-    let written_bytes = tmp.write(new_content.as_bytes()).with_context(|| {
-        format!(
-            "Failed to write to temporary file {}",
-            &tmp.path().display()
-        )
-    })?;
-    trace!("Wrote {} bytes", written_bytes);
+    #[instrument(level = "trace", name = "toml::read_version")]
+    fn read_version(&self) -> eyre::Result<String> {
+        // TODO: Figure out how to do that dynamic
+        let version = self.toml["package"]["version"].as_str().unwrap();
+        let version = version.to_string();
+        Ok(version)
+    }
 
-    debug!(
-        "Copying from {} to {}",
-        &tmp.path().display(),
-        filename.display(),
-    );
-    let _ = fs::copy(tmp.path(), Path::new(filename)).with_context(|| {
-        format!(
-            "Failed to copy from {} to {}",
-            &tmp.path().display(),
-            filename.display()
-        )
-    })?;
-    let _ = project_file
-        .set_permissions(permissions)
-        .context("Failed to restore file permissions")?;
-
-    Ok(())
-}
-
-fn build_version_line(file: &ProjectFile, version: &SemanticVersion) -> String {
-    match file.project_type {
-        ProjectType::Cargo => format!("version = \"{}\"", version),
-        ProjectType::NodeJs => format!("  \"version\": \"{}\",", version),
-        ProjectType::Maven => format!("  <version>{}</version>", version),
-        ProjectType::DefaultNix => format!("  version = \"{}\";", version),
+    #[instrument(level = "trace", name = "toml::update_project")]
+    fn update_project(&mut self, semver: &SemanticVersion) -> eyre::Result<String> {
+        info!("Updating toml!");
+        // TODO: Figure out how to do that dynamic
+        self.toml["package"]["version"] = toml_edit::value(semver.to_string());
+        Ok(self.toml.to_string())
     }
 }
