@@ -4,6 +4,8 @@
 
 [[https://semver.org/][Semantic Versioning]] is difficult for a lot of people and somewhat error prone. This automates the process, given the commit messages follow a certain template (see below), allowing automation of the process in a pipeline or something.
 
+**This is really out of date**
+
 * Supported project types
 - Cargo (Cargo.toml)
 - NPM (package.json)
