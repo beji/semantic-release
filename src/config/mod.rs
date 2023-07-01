@@ -3,6 +3,7 @@ use std::{fs, path::Path};
 use color_eyre::eyre::{self, WrapErr};
 use console::style;
 use serde::Deserialize;
+use toml_edit::Document;
 use tracing::{debug, info};
 
 #[derive(Debug, Deserialize, Clone, Copy)]
@@ -45,8 +46,11 @@ impl Config {
         info!("Parsing config file {:?}", style(&path).bold());
         let file = fs::read_to_string(&path)
             .with_context(|| format!("failed to read config file {:?}", &path))?;
-        let config: Config = toml::from_str(&file)
+
+        let config = file.parse::<Document>().unwrap();
+        let config: Config = toml_edit::de::from_document(config)
             .with_context(|| format!("Failed to parse config file {:?}", &path))?;
+
         debug!("Parsed config: {:?}", config);
         Ok(config)
     }
