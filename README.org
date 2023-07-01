@@ -41,35 +41,15 @@ cargo run -- --help
 
 #+RESULTS:
 #+begin_src sh
-semantic-release 0.2.0
+Usage: semantic-release [OPTIONS] <CONFIG>
 
-USAGE:
-    semantic-release [OPTIONS] [--] [PATH]
+Arguments:
+  <CONFIG>
 
-ARGS:
-    <PATH>    Path to the subproject to release
-
-OPTIONS:
-    -d, --dry
-            Dry run (don't actually change files or do git commits/tags)
-
-    -h, --help
-            Print help information
-
-        --minortokens [<MINORTOKENS>...]
-            Tokens that trigger a patch level bump; comma separated list [default: feat,feature]
-
-        --patchtokens [<PATCHTOKENS>...]
-            Tokens that trigger a patch level bump; comma separated list [default: fix]
-
-    -t, --tag [<TAGPREFIX>...]
-            Prefix of the tags to be matched [default: ]
-
-    -v, --verbose
-            Log debug informations
-
-    -V, --version
-            Print version information
+Options:
+  -v, --verbose...  Log debug infos, may be passed more than once to increase log level
+  -d, --dry         Don't actually change any files or do git commits/tags
+  -h, --help        Print help
 #+end_src
 
 ** Single repo
