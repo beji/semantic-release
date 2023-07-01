@@ -1,0 +1,7 @@
+subpath = "."
+tagprefix = ""
+
+[[files]]
+path = "Cargo.toml"
+key = "project.version"
+type = "toml"
