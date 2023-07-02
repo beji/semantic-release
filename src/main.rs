@@ -65,6 +65,8 @@ fn main() -> eyre::Result<()> {
         let version = version_file.read_version()
             .context("Failed to read version from project file")?;
 
+        debug!("Version: {}", version);
+
         info!("Fetching tags");
         let args = vec![
             "tag".to_owned(),

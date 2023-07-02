@@ -3,5 +3,5 @@ tagprefix = ""
 
 [[files]]
 path = "Cargo.toml"
-key = "project.version"
+key = "package.version"
 type = "toml"

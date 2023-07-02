@@ -1,15 +1,18 @@
+pub mod toml;
+
 use std::{collections::HashMap, fs, path::PathBuf};
 
 use color_eyre::eyre::{self, WrapErr};
 use console::style;
 use serde_json::Value;
-use toml_edit::Document;
 use tracing::{debug, info, instrument, warn};
 
 use crate::{
     config::{ProjectFile, ProjectType},
     semver::SemanticVersion,
 };
+
+use self::toml::Toml;
 
 pub trait VersionFile {
     fn new(filepath: &PathBuf, config: &ProjectFile) -> eyre::Result<Box<Self>>
@@ -69,51 +72,5 @@ impl VersionFile for Json {
             .context("Failed to turn the parsed object back into JSON")?;
         debug!("new json: {}", json);
         Ok(json)
-    }
-}
-
-#[derive(Debug)]
-pub struct Toml {
-    toml: Document,
-    _config: ProjectFile,
-}
-
-impl VersionFile for Toml {
-    #[instrument(level = "trace", name = "toml::new")]
-    fn new(filepath: &PathBuf, config: &ProjectFile) -> eyre::Result<Box<Self>>
-    where
-        Self: Sized,
-    {
-        let filecontent = fs::read_to_string(filepath).context("Failed to read project file")?;
-        let toml = filecontent
-            .parse::<Document>()
-            .context("Failed to parse toml file")?;
-        let config = config.clone();
-        debug!("toml: {:?}", toml);
-        warn!(
-            "the toml parser currently has the key {} hard coded, the configured value {} is ignored",
-            style("project.version").bold(),
-            style(&config.key).bold()
-        );
-        Ok(Box::new(Toml {
-            toml,
-            _config: config,
-        }))
-    }
-
-    #[instrument(level = "trace", name = "toml::read_version")]
-    fn read_version(&self) -> eyre::Result<String> {
-        // TODO: Figure out how to do that dynamic
-        let version = self.toml["package"]["version"].as_str().unwrap();
-        let version = version.to_string();
-        Ok(version)
-    }
-
-    #[instrument(level = "trace", name = "toml::update_project")]
-    fn update_project(&mut self, semver: &SemanticVersion) -> eyre::Result<String> {
-        info!("Updating toml!");
-        // TODO: Figure out how to do that dynamic
-        self.toml["package"]["version"] = toml_edit::value(semver.to_string());
-        Ok(self.toml.to_string())
     }
 }
