@@ -134,7 +134,7 @@ fn main() -> eyre::Result<()> {
                 let path = &file_handle.path().clone();
                 info!("Successfully updated the project file");
                 debug!("Moving temporay file {:?} to {:?}", &path, &filepath);
-                fs::copy(&path, &filepath).context("Failed to copy from temporary file to target")?;
+                fs::copy(path, &filepath).context("Failed to copy from temporary file to target")?;
             }
             info!(
                 "Adding {} to the git commit",

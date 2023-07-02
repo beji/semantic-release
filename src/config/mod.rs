@@ -25,8 +25,8 @@ pub struct ProjectFile {
 impl Clone for ProjectFile {
     fn clone(&self) -> Self {
         ProjectFile {
-            path: format!("{}", self.path),
-            key: format!("{}", self.key),
+            path: self.path.to_string(),
+            key: self.key.to_string(),
             project_type: self.project_type,
         }
     }

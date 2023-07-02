@@ -58,7 +58,7 @@ impl VersionFile for Json {
     #[instrument(level = "trace", name = "json::update_project")]
     fn update_project(&mut self, semver: &SemanticVersion) -> eyre::Result<String> {
         info!("Updating JSON");
-        let key = format!("{}", self.config.key);
+        let key = self.config.key.to_string();
         debug!(
             "Trying to insert {} into key {}",
             style(semver.to_string()).bold(),

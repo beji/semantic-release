@@ -3,7 +3,7 @@ use std::{fs, path::PathBuf};
 use crate::{config::ProjectFile, semver::SemanticVersion};
 use color_eyre::eyre::{self, WrapErr};
 use console::style;
-use toml_edit::{Document, Item, Value};
+use toml_edit::{Document, Item};
 use tracing::{debug, info, instrument, trace, warn};
 
 use super::VersionFile;
@@ -28,7 +28,7 @@ impl VersionFile for Toml {
         debug!("toml: {:?}", toml);
         Ok(Box::new(Toml {
             toml,
-            config: config,
+            config,
         }))
     }
 
@@ -36,7 +36,7 @@ impl VersionFile for Toml {
     fn read_version(&self) -> eyre::Result<String> {
         // TODO: Figure out how to do that dynamic
 
-        let path: Vec<&str> = self.config.key.split(".").collect();
+        let path: Vec<&str> = self.config.key.split('.').collect();
         let path = path.as_slice();
         let version = get_version(self.toml.as_item(), path, 0)?;
 
@@ -48,7 +48,7 @@ impl VersionFile for Toml {
     #[instrument(level = "trace", name = "toml::update_project", skip(self))]
     fn update_project(&mut self, semver: &SemanticVersion) -> eyre::Result<String> {
         info!("Updating toml!");
-        let path: Vec<&str> = self.config.key.split(".").collect();
+        let path: Vec<&str> = self.config.key.split('.').collect();
         let path = path.as_slice();
         update_version(self.toml.as_item_mut(), path, 0, &semver.to_string())?;
         Ok(self.toml.to_string())
