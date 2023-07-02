@@ -8,6 +8,7 @@ use console::style;
 use tempfile::NamedTempFile;
 use tracing::{debug, info, span, warn, Level};
 
+use crate::git::BumpLevel;
 use crate::project::load_versionfile;
 use crate::{cli::CliContext, git::calc_bumplevel, semver::SemanticVersion};
 
@@ -48,7 +49,7 @@ fn main() -> eyre::Result<()> {
     let subpath = path.join(&config.subpath);
 
     let mut semver = SemanticVersion::new();
-    let mut has_commits = false;
+    let mut commit_changes = false;
 
     config.files.iter().try_for_each(|file| -> eyre::Result<()> {
         let span = span!(Level::TRACE, "file", file = &file.path);
@@ -111,6 +112,10 @@ fn main() -> eyre::Result<()> {
             let bumplevel = calc_bumplevel(&commits);
             info!("Bumplevel: {:?}", style(&bumplevel).bold());
 
+            if bumplevel == BumpLevel::None {
+                commit_changes = false;
+            }
+
             semver.set_version(&version)
                 .context("Failed to parse version into a semantic version")?;
             semver.bump(bumplevel);
@@ -144,13 +149,13 @@ fn main() -> eyre::Result<()> {
             } else {
                 run_command("git", &subpath, args).context("Failed to execute git add")?;
             }
-            has_commits = true;
+            commit_changes = true;
         }
 
         eyre::Result::Ok(())
     })?;
 
-    if has_commits {
+    if commit_changes {
         info!("Doing the git commit");
         let args = vec![
             "commit".to_string(),
