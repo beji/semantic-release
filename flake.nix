@@ -64,7 +64,7 @@
         # "basic" rust builds without dream2nix
         packages.default = pkgs.rustPlatform.buildRustPackage {
           pname = "semantic-release";
-          version = "1.1.0";
+          version = "1.2.0";
           src = (inputs.nix-filter.lib {
             root = ./.;
             exclude = [
