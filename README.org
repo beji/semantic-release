@@ -51,6 +51,7 @@ Arguments:
 Options:
   -v, --verbose...  Log debug infos, may be passed more than once to increase log level
   -d, --dry         Don't actually change any files or do git commits/tags
+      --init        Create a config file at the given path instead of doing any semantic releasing
   -h, --help        Print help
 #+end_src
 

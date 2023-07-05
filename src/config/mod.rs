@@ -1,6 +1,9 @@
 use std::{fs, path::Path};
 
-use color_eyre::eyre::{self, WrapErr};
+use color_eyre::{
+    eyre::{self, WrapErr},
+    Help,
+};
 use console::style;
 use serde::Deserialize;
 use toml_edit::Document;
@@ -42,14 +45,17 @@ pub struct Config {
 impl Config {
     pub fn from_path(path: &str) -> eyre::Result<Config> {
         let path = Path::new(path);
-        let path = fs::canonicalize(path)?;
+        let path = fs::canonicalize(path)
+            .wrap_err_with(|| format!("Failed to turn {} into a valid path", &path.display()))
+            .suggestion("If the file doesn't exist you can create it with the --init flag")?;
         info!("Parsing config file {:?}", style(&path).bold());
         let file = fs::read_to_string(&path)
-            .with_context(|| format!("failed to read config file {:?}", &path))?;
+            .wrap_err_with(|| format!("failed to read config file {:?}", &path))
+            .suggestion("If the file doesn't exist you can create it with the --init flag")?;
 
         let config = file.parse::<Document>().unwrap();
         let config: Config = toml_edit::de::from_document(config)
-            .with_context(|| format!("Failed to parse config file {:?}", &path))?;
+            .wrap_err_with(|| format!("Failed to parse config file {:?}", &path))?;
 
         debug!("Parsed config: {:?}", config);
         Ok(config)

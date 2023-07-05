@@ -15,6 +15,7 @@ use crate::{cli::CliContext, git::calc_bumplevel, semver::SemanticVersion};
 mod cli;
 mod config;
 mod git;
+mod init;
 mod project;
 mod semver;
 
@@ -40,18 +41,21 @@ fn main() -> eyre::Result<()> {
         .with_target(false)
         .init();
 
-    let config =
-        config::Config::from_path(&cli_context.path).context("Failed to build configuration")?;
+    if cli_context.init {
+        init::init_project(&cli_context).wrap_err("Failed to initialize a new config file")?;
+    } else {
+        let config = config::Config::from_path(&cli_context.path)
+            .context("Failed to build configuration")?;
 
-    let path = Path::new(&cli_context.path);
-    let path = path.parent().unwrap();
-    let path = fs::canonicalize(path)?;
-    let subpath = path.join(&config.subpath);
+        let path = Path::new(&cli_context.path);
+        let path = path.parent().unwrap();
+        let path = fs::canonicalize(path)?;
+        let subpath = path.join(&config.subpath);
 
-    let mut semver = SemanticVersion::new();
-    let mut commit_changes = false;
+        let mut semver = SemanticVersion::new();
+        let mut commit_changes = false;
 
-    config.files.iter().try_for_each(|file| -> eyre::Result<()> {
+        config.files.iter().try_for_each(|file| -> eyre::Result<()> {
         let span = span!(Level::TRACE, "file", file = &file.path);
         let _guard = span.enter();
         let filename = &file.path;
@@ -157,43 +161,44 @@ fn main() -> eyre::Result<()> {
         eyre::Result::Ok(())
     })?;
 
-    if commit_changes {
-        info!("Doing the git commit");
-        let args = vec![
-            "commit".to_string(),
-            "-m".to_string(),
-            format!("[Semantic release]: Release {}", &semver.to_string()),
-        ];
-        if cli_context.dryrun {
-            info!("Dry run is active, not commiting anything");
-            debug!(
-                "Would run git with the arguments {:?} from the directory {:?}",
-                args, &subpath
+        if commit_changes {
+            info!("Doing the git commit");
+            let args = vec![
+                "commit".to_string(),
+                "-m".to_string(),
+                format!("[Semantic release]: Release {}", &semver.to_string()),
+            ];
+            if cli_context.dryrun {
+                info!("Dry run is active, not commiting anything");
+                debug!(
+                    "Would run git with the arguments {:?} from the directory {:?}",
+                    args, &subpath
+                );
+            } else {
+                run_command("git", &subpath, args).context("Failed to execute git commit")?;
+            }
+
+            // TODO: Maybe make tagging optional?
+            let tag = format!("{}{}", &config.tagprefix, &semver.to_string());
+            info!("Tagging the release with tag {}", style(&tag).bold());
+            let args = vec!["tag".to_string(), tag];
+            if cli_context.dryrun {
+                info!("Dry run is active, not tagging anything");
+                debug!(
+                    "Would run git with the arguments {:?} from the directory {:?}",
+                    args, &subpath
+                );
+            } else {
+                run_command("git", &subpath, args).context("Failed to execute git tag")?;
+            }
+
+            info!(
+                "All done! keep in mind that this doesn't do a {}",
+                style("git push").bold()
             );
         } else {
-            run_command("git", &subpath, args).context("Failed to execute git commit")?;
+            info!("Nothing to change");
         }
-
-        // TODO: Maybe make tagging optional?
-        let tag = format!("{}{}", &config.tagprefix, &semver.to_string());
-        info!("Tagging the release with tag {}", style(&tag).bold());
-        let args = vec!["tag".to_string(), tag];
-        if cli_context.dryrun {
-            info!("Dry run is active, not tagging anything");
-            debug!(
-                "Would run git with the arguments {:?} from the directory {:?}",
-                args, &subpath
-            );
-        } else {
-            run_command("git", &subpath, args).context("Failed to execute git tag")?;
-        }
-
-        info!(
-            "All done! keep in mind that this doesn't do a {}",
-            style("git push").bold()
-        );
-    } else {
-        info!("Nothing to change");
     }
     Ok(())
 }

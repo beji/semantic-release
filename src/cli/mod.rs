@@ -10,6 +10,9 @@ struct CliArgs {
     /// Don't actually change any files or do git commits/tags
     #[arg(short, long, default_value_t = false)]
     dry: bool,
+    /// Create a config file at the given path instead of doing any semantic releasing
+    #[arg(long, default_value_t = false)]
+    init: bool,
     config: String,
 }
 impl CliArgs {
@@ -22,10 +25,12 @@ impl CliArgs {
     }
 }
 
+#[derive(Debug)]
 pub struct CliContext {
     pub path: String,
     pub log_level: LevelFilter,
     pub dryrun: bool,
+    pub init: bool,
 }
 
 impl CliContext {
@@ -35,11 +40,13 @@ impl CliContext {
         let log_level = cli.log_level();
 
         let dryrun = cli.dry;
+        let init = cli.init;
 
         Ok(CliContext {
             path: cli.config,
             log_level,
             dryrun,
+            init,
         })
     }
 }
